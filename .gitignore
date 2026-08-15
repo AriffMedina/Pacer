@@ -1,0 +1,13 @@
+# Local planning and context — never committed.
+# See .context/README.md
+.context/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environments
+.venv/
