@@ -1,0 +1,11 @@
+[importlinter]
+root_package = pacer
+
+[importlinter:contract:regla-de-dependencia]
+name = El dominio no depende de nada
+type = forbidden
+source_modules = pacer.domain
+forbidden_modules =
+    pacer.infrastructure
+    pacer.interfaces
+    pacer.application

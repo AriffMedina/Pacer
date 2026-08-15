@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pacer
+      POSTGRES_PASSWORD: pacer
+      POSTGRES_DB: pacer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  langfuse:
+    image: langfuse/langfuse:2
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://pacer:pacer@postgres:5432/pacer
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: dev-secret-cambiar-en-produccion
+      SALT: dev-salt-cambiar-en-produccion
+
+volumes:
+  postgres_data:
