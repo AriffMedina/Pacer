@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any
 
 from pacer.application.casos_uso.crear_plan import crear_plan
+from pacer.application.contexto.fechas import interpretar_fecha
 from pacer.application.herramientas.despachador import despachar
 from pacer.application.herramientas.esquemas import catalogo_para_bedrock
 from pacer.domain.entidades.perfil import Perfil
@@ -21,6 +22,8 @@ from pacer.domain.servicios.registro import registrar
 from pacer.domain.servicios.resolutor import resolver_sesion
 
 MAX_VUELTAS = 4
+
+TEXTO_DE_RESPALDO = "Perdón, se me enredó eso. ¿Me lo repites?"
 
 SENSACIONES_VALIDAS: tuple[Sensacion, ...] = (
     "facil",
@@ -87,7 +90,9 @@ def procesar_turno(
 
             if "error" not in resultado:
                 if llamada.nombre == "actualizar_perfil":
-                    perfil = _aplicar_actualizacion(perfil, llamada.entrada)
+                    perfil, problema = _aplicar_actualizacion(perfil, llamada.entrada)
+                    if problema is not None:
+                        resultado = problema
                 elif llamada.nombre == "generar_plan":
                     plan, resultado = _generar(perfil, hoy)
                 elif llamada.nombre == "registrar_sesion":
@@ -97,8 +102,10 @@ def procesar_turno(
 
         historial.append(_mensaje_de_resultados(resultados))
 
+    # Nunca se devuelve texto vacío: desde el teléfono, silencio y error se ven
+    # igual, y el usuario acaba repitiendo sin saber si lo escucharon.
     return ResultadoTurno(
-        texto="",
+        texto=TEXTO_DE_RESPALDO,
         perfil=perfil,
         mensajes=historial,
         vueltas=max_vueltas,
@@ -215,21 +222,35 @@ def _mensaje_de_resultados(
     }
 
 
-def _aplicar_actualizacion(perfil: Perfil, entrada: dict[str, Any]) -> Perfil:
-    """Escribe solo los campos que el modelo mencionó; el resto no se toca."""
+def _aplicar_actualizacion(
+    perfil: Perfil, entrada: dict[str, Any]
+) -> tuple[Perfil, dict[str, Any] | None]:
+    """Escribe solo los campos que el modelo mencionó; el resto no se toca.
+
+    Si la fecha no se entiende se DEVUELVE el problema en vez de ignorarlo.
+    Tragárselo dejaba al modelo probando formatos a ciegas —el guardarrail solo
+    le decía "falta la fecha", nunca "la fecha que mandaste no se entiende"— y
+    la conversación entraba en bucle.
+    """
     cambios: dict[str, Any] = {
         campo: entrada[campo]
         for campo in CAMPOS_DE_PERFIL
         if entrada.get(campo) is not None
     }
 
-    fecha = entrada.get("fecha_carrera")
-    if fecha:
-        try:
-            cambios["fecha_carrera"] = date.fromisoformat(fecha)
-        except ValueError:
-            # Fecha ilegible: se ignora en vez de romper el turno. El coach la
-            # volverá a pedir porque el guardarrail la sigue viendo faltante.
-            pass
+    fecha_cruda = entrada.get("fecha_carrera")
+    if fecha_cruda:
+        fecha = interpretar_fecha(str(fecha_cruda))
+        if fecha is None:
+            return replace(perfil, **cambios), {
+                "error": "fecha_no_entendida",
+                "recibido": fecha_cruda,
+                "formato_esperado": "AAAA-MM-DD",
+                "explicacion": (
+                    "Pregunta el día, el mes y el año, y mándalos como "
+                    "2026-12-12. No se lo preguntes al corredor en ese formato."
+                ),
+            }
+        cambios["fecha_carrera"] = fecha
 
-    return replace(perfil, **cambios)
+    return replace(perfil, **cambios), None

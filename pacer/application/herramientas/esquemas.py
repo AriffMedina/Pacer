@@ -19,7 +19,13 @@ class ActualizarPerfil(BaseModel):
     nivel: Literal["nuevo", "principiante", "intermedio", "avanzado"] | None = None
     dias_disponibles: int | None = Field(None, ge=2, le=6)
     km_semana: int | None = Field(None, ge=0, le=200)
-    fecha_carrera: str | None = None
+    fecha_carrera: str | None = Field(
+        None,
+        description=(
+            "Fecha de la carrera en formato ISO AAAA-MM-DD, por ejemplo "
+            "2026-12-12. Si el corredor no dijo el año, pregúntaselo antes."
+        ),
+    )
     dolor_actual: bool | None = None
 
 

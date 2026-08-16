@@ -286,3 +286,50 @@ def test_el_bucle_no_gira_para_siempre() -> None:
 
     assert resultado.vueltas == 3
     assert resultado.corto_por_limite
+    # Nunca vacío: desde el teléfono, silencio y error se ven igual.
+    assert resultado.texto
+
+
+def test_una_fecha_ilegible_se_reporta_en_vez_de_ignorarse() -> None:
+    llm = LLMFalso(
+        con_llamada("actualizar_perfil", {"fecha_carrera": "el próximo verano"}),
+        solo_texto("¿Qué día exactamente?"),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], Perfil(), hoy=HOY
+    )
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["error"] == "fecha_no_entendida"
+    assert devuelto["formato_esperado"] == "AAAA-MM-DD"
+    assert resultado.perfil.fecha_carrera is None
+
+
+def test_una_fecha_dicha_como_habla_la_gente_se_entiende() -> None:
+    llm = LLMFalso(
+        con_llamada("actualizar_perfil", {"fecha_carrera": "12 de diciembre de 2026"}),
+        solo_texto("Anotado."),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], Perfil(), hoy=HOY
+    )
+
+    assert resultado.perfil.fecha_carrera == date(2026, 12, 12)
+
+
+def test_los_demas_campos_se_guardan_aunque_la_fecha_falle() -> None:
+    llm = LLMFalso(
+        con_llamada(
+            "actualizar_perfil",
+            {"objetivo": "maraton", "fecha_carrera": "cuando pueda"},
+        ),
+        solo_texto("¿Cuándo?"),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], Perfil(), hoy=HOY
+    )
+
+    assert resultado.perfil.objetivo == "maraton"
