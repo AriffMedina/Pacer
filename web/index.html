@@ -35,6 +35,17 @@
 
     async function empezar() {
       if (grabadora) return;
+
+      // navigator.mediaDevices solo existe en contexto seguro: HTTPS o localhost.
+      // Aplica a todos los navegadores, no solo a Safari.
+      if (!navigator.mediaDevices) {
+        estado.textContent = "Este navegador no expone el micrófono aquí.";
+        anotar("navigator.mediaDevices no existe.");
+        anotar("Contexto seguro: " + window.isSecureContext + " · origen: " + window.location.origin);
+        anotar("Se necesita HTTPS. En http:// solo funciona desde localhost.");
+        return;
+      }
+
       try {
         const flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
         grabadora = new MediaRecorder(flujo);
