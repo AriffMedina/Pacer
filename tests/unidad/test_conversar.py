@@ -6,6 +6,7 @@ from typing import Any
 from pacer.application.casos_uso.conversar import procesar_turno
 from pacer.application.casos_uso.crear_plan import crear_plan
 from pacer.domain.entidades.perfil import Perfil
+from pacer.domain.entidades.plan import Plan
 from pacer.domain.puertos.llm import LlamadaHerramienta, RespuestaLLM
 
 HOY = date(2026, 8, 16)
@@ -159,9 +160,96 @@ def test_una_meta_inalcanzable_vuelve_como_alternativas() -> None:
     procesar_turno(llm, "sistema", [mensaje_usuario("plan")], apurado, hoy=HOY)
 
     devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
-    assert devuelto["error"] == "meta_inalcanzable"
+    assert devuelto["error"] == "faltan_semanas"
     assert devuelto["semanas_minimas"] == 20
     assert devuelto["alternativas"]
+
+
+def test_cuando_falta_base_no_se_ofrece_mover_la_fecha() -> None:
+    """Un maratón desde cero no se arregla con tiempo, y ofrecerlo confunde.
+
+    Antes las alternativas eran una lista fija: siempre decía "mover la fecha"
+    y "bajar la distancia", aunque una de las dos no viniera al caso.
+    """
+    desde_cero = Perfil(
+        objetivo="maraton",
+        nivel="nuevo",
+        dias_disponibles=4,
+        km_semana=10,
+        fecha_carrera=date(2028, 10, 1),
+    )
+    llm = LLMFalso(con_llamada("generar_plan", {}), solo_texto("Vamos por partes."))
+
+    procesar_turno(llm, "sistema", [mensaje_usuario("plan")], desde_cero, hoy=HOY)
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["error"] == "meta_inalcanzable"
+    assert "semanas_minimas" not in devuelto
+    assert not any("fecha" in a for a in devuelto["alternativas"])
+
+
+def test_un_plan_nuevo_se_pone_por_encima_del_que_habia() -> None:
+    """El generador siempre produce v1, pero `version_activa` devuelve la MAYOR.
+
+    Sin esto: ajustas el plan a v2, cambias de carrera objetivo, se genera el
+    plan nuevo como v1 y la app te sigue enseñando el de la carrera que
+    abandonaste. Versionar sigue siendo la regla; lo que no puede es que un plan
+    nuevo nazca por debajo de su propia historia.
+    """
+    listo = Perfil(
+        objetivo="10k",
+        nivel="intermedio",
+        dias_disponibles=4,
+        km_semana=25,
+        fecha_carrera=date(2026, 11, 1),
+    )
+    viejo = Plan(version=3, semanas=())
+    llm = LLMFalso(con_llamada("generar_plan", {}), solo_texto("Listo."))
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("plan")], listo, hoy=HOY, plan=viejo
+    )
+
+    assert resultado.plan is not None
+    assert resultado.plan.version == 4
+    assert resultado.plan.motivo_cambio
+
+
+def test_el_primer_plan_de_todos_sigue_siendo_la_version_uno() -> None:
+    listo = Perfil(
+        objetivo="10k",
+        nivel="intermedio",
+        dias_disponibles=4,
+        km_semana=25,
+        fecha_carrera=date(2026, 11, 1),
+    )
+    llm = LLMFalso(con_llamada("generar_plan", {}), solo_texto("Listo."))
+
+    resultado = procesar_turno(llm, "sistema", [mensaje_usuario("plan")], listo, hoy=HOY)
+
+    assert resultado.plan is not None
+    assert resultado.plan.version == 1
+    assert resultado.plan.motivo_cambio is None
+
+
+def test_un_plan_que_empieza_mas_adelante_lo_dice() -> None:
+    """Con la carrera muy lejos el bloque arranca después. Si no se dice, el
+    corredor abre la app mañana, no ve nada y cree que se rompió."""
+    lejano = Perfil(
+        objetivo="10k",
+        nivel="principiante",
+        dias_disponibles=4,
+        km_semana=20,
+        fecha_carrera=date(2027, 3, 20),
+    )
+    llm = LLMFalso(con_llamada("generar_plan", {}), solo_texto("Listo."))
+
+    procesar_turno(llm, "sistema", [mensaje_usuario("plan")], lejano, hoy=HOY)
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["ok"] is True
+    assert devuelto["empieza_el"] > HOY.isoformat()
+    assert devuelto["que_hacer_mientras"]
 
 
 def test_registrar_una_sesion_dura_produce_la_version_dos() -> None:

@@ -482,7 +482,8 @@ async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
         return JSONResponse({"error": "fecha_no_entendida"}, status_code=400)
 
     try:
-        km = float(cuerpo["distancia_km"]) if cuerpo.get("distancia_km") else None
+        # Un decimal: las carreras se miden así, y 12.347 km no le sirve a nadie.
+        km = round(float(cuerpo["distancia_km"]), 1) if cuerpo.get("distancia_km") else None
     except (TypeError, ValueError):
         return JSONResponse({"error": "distancia_no_entendida"}, status_code=400)
 

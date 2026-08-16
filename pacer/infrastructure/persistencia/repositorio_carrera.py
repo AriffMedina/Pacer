@@ -77,11 +77,19 @@ def _a_dominio(fila: CarreraORM) -> Carrera:
         id=fila.id,
         fecha=fila.fecha,
         nombre=fila.nombre,
-        distancia_km=fila.distancia_km
-        if fila.distancia_km is not None
-        else _km_del_texto_viejo(fila.distancia),
+        # Se redondea también al LEER: las filas guardadas antes de esta regla
+        # traen la basura decimal con la que se escribieron.
+        distancia_km=_un_decimal(
+            fila.distancia_km
+            if fila.distancia_km is not None
+            else _km_del_texto_viejo(fila.distancia)
+        ),
         nota=fila.nota,
     )
+
+
+def _un_decimal(km: float | None) -> float | None:
+    return round(km, 1) if km is not None else None
 
 
 # Distancias que se guardaron como texto antes de que fueran kilómetros.

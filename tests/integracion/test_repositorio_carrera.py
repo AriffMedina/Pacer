@@ -55,6 +55,18 @@ async def test_guarda_la_distancia_como_kilometros(sesion_bd: AsyncSession) -> N
     assert (await repositorio.todas(CORREDOR))[0].distancia_km == 3.5
 
 
+async def test_la_distancia_se_guarda_con_un_decimal(sesion_bd: AsyncSession) -> None:
+    """Nadie corre 12.347 km, y ese ruido se cuela en la tarjeta y en la voz."""
+    repositorio = RepositorioCarrera(sesion_bd)
+
+    await repositorio.agregar(
+        CORREDOR,
+        Carrera(fecha=date(2027, 3, 20), nombre="Rara", distancia_km=12.347),
+    )
+
+    assert (await repositorio.todas(CORREDOR))[0].distancia_km == 12.3
+
+
 async def test_rescata_la_distancia_de_las_filas_viejas(
     sesion_bd: AsyncSession,
 ) -> None:

@@ -27,6 +27,12 @@ MAX_VUELTAS = 4
 
 TEXTO_DE_RESPALDO = "Perdón, se me enredó eso. ¿Me lo repites?"
 
+COMO_DECIR_QUE_NO = (
+    "Explica la razón con tus palabras, como entrenador, y ofrece SOLO las "
+    "alternativas de la lista. NUNCA digas que el sistema no te deja: la "
+    "decisión es tuya y tienes el motivo."
+)
+
 # Herramientas cuyo resultado no le dice nada nuevo al modelo: confirman que se
 # guardó un dato que él mismo acaba de mandar. Si ya escribió texto en el mismo
 # turno, ese texto sirve y el segundo viaje al modelo es tiempo regalado.
@@ -113,7 +119,7 @@ def procesar_turno(
                     if problema is not None:
                         resultado = problema
                 elif llamada.nombre == "generar_plan":
-                    plan, resultado = _generar(perfil, hoy)
+                    plan, resultado = _generar(perfil, hoy, previo=plan)
                 elif llamada.nombre == "registrar_sesion":
                     plan, resultado = _registrar_y_ajustar(plan, llamada.entrada, hoy)
                 elif llamada.nombre == "apuntar_carrera":
@@ -171,7 +177,9 @@ def _apuntar_carrera(entrada: dict[str, Any]) -> tuple[Carrera | None, dict[str,
     carrera = Carrera(
         fecha=fecha,
         nombre=nombre,
-        distancia_km=float(km) if km else None,
+        # Un decimal: las carreras se miden así. Nadie corre 12.347 km, y ese
+        # ruido decimal se cuela en la tarjeta y en lo que dice el coach.
+        distancia_km=round(float(km), 1) if km else None,
         nota=str(entrada.get("nota") or ""),
     )
 
@@ -190,7 +198,9 @@ def _apuntar_carrera(entrada: dict[str, Any]) -> tuple[Carrera | None, dict[str,
     return carrera, resultado
 
 
-def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:
+def _generar(
+    perfil: Perfil, hoy: date, previo: Plan | None = None
+) -> tuple[Plan | None, dict[str, Any]]:
     """Genera el plan y devuelve un RESUMEN al modelo, nunca el plan entero.
 
     Mandarle las semanas completas gastaría tokens sin darle nada que decidir:
@@ -199,25 +209,71 @@ def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:
     try:
         nuevo = crear_plan(perfil, hoy=hoy)
     except PlanImposible as rechazo:
-        return None, {
-            "error": "meta_inalcanzable",
-            "motivo": rechazo.motivo,
-            "razon_para_explicar": rechazo.razon,
-            "semanas_minimas": rechazo.minimo,
-            "alternativas": ["mover la fecha de la carrera", "bajar la distancia"],
-            "como_decirlo": (
-                "Explica la razón con tus palabras, como entrenador. NUNCA "
-                "digas que el sistema no te deja: la decisión es tuya y tienes "
-                "el motivo."
-            ),
-        }
+        return None, _no_hay_plan(rechazo)
+
+    # El generador siempre devuelve v1, pero `version_activa` toma la MAYOR: un
+    # plan nuevo tiene que quedar por encima de su propia historia o la app
+    # seguiría enseñando el plan de la carrera que el corredor abandonó.
+    if previo is not None:
+        nuevo = replace(
+            nuevo,
+            version=previo.version + 1,
+            motivo_cambio="Plan nuevo para tu carrera objetivo.",
+        )
 
     de_carga = [semana for semana in nuevo.semanas if not semana.es_descarga]
-    return nuevo, {
+    arranque = nuevo.semanas[0].sesiones[0].fecha
+
+    resultado: dict[str, Any] = {
         "ok": True,
         "semanas": len(nuevo.semanas),
         "km_primera_semana": nuevo.semanas[0].km_total,
         "km_pico": max(semana.km_total for semana in de_carga),
+    }
+
+    # Cuando la carrera está muy lejos el plan no empieza hoy: empieza cuando
+    # toca. Decírselo evita que el corredor abra la app mañana y no vea nada.
+    if arranque > hoy:
+        resultado["empieza_el"] = arranque.isoformat()
+        resultado["que_hacer_mientras"] = (
+            "Falta para arrancar el bloque. Dile que hasta esa fecha mantenga "
+            "lo que ya hace, sin subir carga, y que el plan aparecerá entonces."
+        )
+
+    return nuevo, resultado
+
+
+def _no_hay_plan(rechazo: PlanImposible) -> dict[str, Any]:
+    """Lo que se le devuelve al modelo cuando la meta no admite un plan seguro.
+
+    Las alternativas se derivan del rechazo REAL. Antes eran una lista fija que
+    incluía "bajar la distancia" siempre, y hubo un caso donde eso empeoraba el
+    problema: el modelo mezcló los números y dijo que 30 semanas no alcanzaban
+    para un mínimo de 10.
+    """
+    if rechazo.minimo is None:
+        # No es cuestión de tiempo: falta base. Mover la fecha no arregla nada.
+        return {
+            "error": "meta_inalcanzable",
+            "motivo": rechazo.motivo,
+            "razon_para_explicar": rechazo.razon,
+            "alternativas": [
+                "empezar por una distancia más corta y construir base primero"
+            ],
+            "no_ofrezcas": "mover la fecha de la carrera: el problema no es el tiempo",
+            "como_decirlo": COMO_DECIR_QUE_NO,
+        }
+
+    return {
+        "error": "faltan_semanas",
+        "motivo": rechazo.motivo,
+        "razon_para_explicar": rechazo.razon,
+        "semanas_minimas": rechazo.minimo,
+        "alternativas": [
+            "mover la carrera objetivo a una fecha más adelante",
+            "bajar la distancia de la meta",
+        ],
+        "como_decirlo": COMO_DECIR_QUE_NO,
     }
 
 
