@@ -311,6 +311,65 @@ async def voz(turno_id: str) -> Response:
     return Response(audio, media_type="audio/mpeg")
 
 
+@app.get("/api/plan")
+async def plan_actual() -> dict[str, Any]:
+    """El plan vigente y el perfil, para las pantallas de plan y agenda."""
+    hoy = datetime.now(UTC).date()
+
+    async with app.state.fabrica() as bd:
+        corredores = RepositorioCorredor(bd)
+        corredor = await corredores.obtener_o_crear_piloto()
+        plan = await RepositorioPlan(bd).version_activa(corredor.id)
+
+    perfil = corredor.perfil
+    if plan is None:
+        return {"hay_plan": False, "objetivo": perfil.objetivo}
+
+    semana_actual = next(
+        (
+            s.numero
+            for s in plan.semanas
+            if any(ses.fecha >= hoy for ses in s.sesiones)
+        ),
+        len(plan.semanas),
+    )
+
+    return {
+        "hay_plan": True,
+        "version": plan.version,
+        "motivo_cambio": plan.motivo_cambio,
+        "objetivo": perfil.objetivo,
+        "fecha_carrera": perfil.fecha_carrera.isoformat()
+        if perfil.fecha_carrera
+        else None,
+        "dias_para_carrera": (perfil.fecha_carrera - hoy).days
+        if perfil.fecha_carrera
+        else None,
+        "semana_actual": semana_actual,
+        "semanas_totales": len(plan.semanas),
+        "hoy": hoy.isoformat(),
+        "semanas": [
+            {
+                "numero": s.numero,
+                "bloque": s.bloque,
+                "es_descarga": s.es_descarga,
+                "km_total": s.km_total,
+                "sesiones": [
+                    {
+                        "fecha": ses.fecha.isoformat(),
+                        "tipo": ses.tipo,
+                        "km": ses.km,
+                        "completada": ses.completada,
+                        "sensacion": ses.sensacion,
+                    }
+                    for ses in s.sesiones
+                ],
+            }
+            for s in plan.semanas
+        ],
+    }
+
+
 @app.get("/api/salud")
 async def salud() -> dict[str, Any]:
     """Qué capacidades están vivas. Útil cuando algo falla desde el teléfono."""

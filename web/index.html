@@ -1,174 +1,447 @@
 <!doctype html>
 <html lang="es-MX">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pacer</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C100F">
+<title>Pacer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens de UI.md §3. El lima es escaso a propósito: marca lo vivo, no decora. */
+:root{
+  --fondo:#0C100F; --superficie:#141917; --superficie-alta:#1C2220;
+  --linea:rgba(255,255,255,.08);
+  --texto:#F0F3EC; --texto-2:#99A19A; --texto-3:#5C645E;
+  --lima:#C6F94A; --lima-tenue:rgba(198,249,74,.12); --sobre-lima:#0E1211;
+  --curva:cubic-bezier(.22,.61,.36,1);
+}
+/* Claro no es el oscuro invertido: es otra composición (§3). */
+@media (prefers-color-scheme: light){
+  :root{
+    --fondo:#F2F3EE; --superficie:#FFFFFF; --superficie-alta:#FFFFFF;
+    --linea:rgba(14,18,17,.09);
+    --texto:#0E1211; --texto-2:#5C645E; --texto-3:#8A918B;
+    --lima-tenue:rgba(74,107,18,.10);
+  }
+  /* El lima no es color de texto en claro: contraste ~1.4:1. Se usa oliva. */
+  .acento-texto{ color:#4A6B12; }
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:Sora,system-ui,sans-serif; color:var(--texto);
+  min-height:100dvh; padding-bottom:86px;
+  /* El fondo es luz con caída, no un gradiente de dos paradas (§5). El segundo
+     foco descentrado es lo que evita que se vea generado. */
+  background:
+    radial-gradient(140% 62% at 50% -14%, #16302A 0%, transparent 58%),
+    radial-gradient(100% 44% at 78% 8%, #10201D 0%, transparent 62%),
+    linear-gradient(180deg,#0C100F 0%,#090C0B 54%,#080A0A 100%);
+  background-attachment:fixed;
+}
+@media (prefers-color-scheme: light){
+  body{background:
+    radial-gradient(140% 60% at 50% -16%, #FFFFFF 0%, transparent 60%),
+    linear-gradient(180deg,#F2F3EE 0%,#EAECE5 100%);}
+}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.eyebrow{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:500;font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--texto-3)}
+.display{font-weight:300;font-size:clamp(30px,9vw,42px);letter-spacing:-.03em;line-height:1.1}
+.titulo{font-weight:600;font-size:20px;letter-spacing:-.02em}
+
+.pantalla{display:none;padding:28px 20px 8px;max-width:520px;margin:0 auto}
+.pantalla.activa{display:block;animation:entrar .24s var(--curva)}
+@keyframes entrar{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- Orbe: el elemento firma (§7) ---------- */
+.orbe-zona{display:grid;place-items:center;margin:38px 0 26px}
+.orbe{
+  width:168px;height:168px;border-radius:50%;position:relative;
+  background:radial-gradient(circle at 34% 28%,#1E2624 0%,#0D1110 62%,#080A0A 100%);
+  box-shadow:0 0 70px rgba(198,249,74,.16);
+  animation:respirar 4.2s var(--curva) infinite;
+}
+/* Luz de borde solo en el arco superior-izquierdo: una luna, no un blob. */
+.orbe::after{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  border:1.5px solid transparent;
+  background:conic-gradient(from 205deg,rgba(198,249,74,.62) 0deg,transparent 110deg) border-box;
+  -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+}
+@keyframes respirar{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+.orbe.pensando::after{animation:girar 2.4s linear infinite}
+@keyframes girar{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .orbe,.orbe::after{animation:none!important}
+}
+
+/* ---------- Transcripción que se desvanece (§8) ---------- */
+.transcripcion{min-height:112px;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 42%);
+  mask-image:linear-gradient(180deg,transparent,#000 42%)}
+.turno{line-height:1.4;transition:opacity .24s var(--curva)}
+.turno.actual{font-size:22px;opacity:1}
+.turno.previo{font-size:18px;opacity:.32}
+.turno.viejo{font-size:16px;opacity:.12}
+.turno.mio{text-align:right;color:var(--texto-2)}
+.turno.coach{text-align:center}
+.estado{margin-top:14px;text-align:center}
+
+.chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:20px 0 8px}
+.chip{background:var(--superficie);border:1px solid var(--linea);border-radius:999px;
+  padding:9px 14px;font-size:13.5px;color:var(--texto-2);cursor:pointer;
+  transition:transform .24s var(--curva)}
+.chip:active{transform:scale(.97)}
+
+/* ---------- Controles ---------- */
+.controles{position:fixed;left:0;right:0;bottom:86px;padding:0 20px;
+  max-width:520px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.hablar{flex:1;height:56px;border:0;border-radius:999px;background:var(--lima);
+  color:var(--sobre-lima);font-family:'JetBrains Mono',monospace;font-weight:500;
+  font-size:11px;letter-spacing:.14em;cursor:pointer;touch-action:none;
+  transition:transform .24s var(--curva)}
+.hablar:active{transform:scale(.98)}
+.hablar[disabled]{opacity:.45}
+.redondo{width:48px;height:48px;border-radius:50%;background:var(--superficie);
+  border:1px solid var(--linea);color:var(--texto-2);font-size:17px;cursor:pointer}
+
+/* ---------- Tarjetas de sesión (§9): rampa ordinal, no arcoíris ---------- */
+.tarjeta{background:var(--superficie);border:1px solid var(--linea);border-radius:20px;
+  padding:15px 16px;display:flex;gap:14px;align-items:center;margin-bottom:10px}
+.tarjeta.hoy{background:var(--superficie-alta);border-color:rgba(198,249,74,.28);
+  box-shadow:0 0 32px rgba(198,249,74,.07)}
+.barra{width:3px;align-self:stretch;border-radius:2px;min-height:44px}
+.barra.facil{background:rgba(255,255,255,.22)}
+.barra.calidad{background:rgba(255,255,255,.55)}
+.barra.largo{border:1px solid var(--lima);background:transparent}
+@media (prefers-color-scheme: light){
+  .barra.facil{background:rgba(14,18,17,.18)}
+  .barra.calidad{background:rgba(14,18,17,.45)}
+}
+.tarjeta .cuerpo{flex:1;min-width:0}
+.tarjeta .dia{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--texto-3)}
+.tarjeta .tipo{font-weight:600;font-size:15px;margin-top:2px}
+.tarjeta .km{font-family:'JetBrains Mono',monospace;font-size:21px;white-space:nowrap}
+.hecha{color:var(--texto-3);font-size:11px;letter-spacing:.1em}
+
+.progreso{display:flex;align-items:center;gap:12px;margin:18px 0 20px}
+.riel{flex:1;height:1px;background:var(--linea);position:relative}
+.riel span{position:absolute;inset:0 auto 0 0;background:var(--lima);height:1px}
+.tag{display:inline-block;background:var(--lima-tenue);border:1px solid rgba(198,249,74,.3);
+  border-radius:999px;padding:3px 9px;font-family:'JetBrains Mono',monospace;font-size:11px}
+.cta{width:100%;height:56px;border:0;border-radius:999px;background:var(--lima);
+  color:var(--sobre-lima);font-weight:600;font-size:14px;letter-spacing:.02em;
+  margin:18px 0 6px;cursor:pointer}
+
+.cuenta{font-family:'JetBrains Mono',monospace;font-size:74px;line-height:1;letter-spacing:-.03em}
+.vacio-estado{color:var(--texto-2);line-height:1.6;margin-top:18px}
+
+/* ---------- Navegación conectada (§10) ---------- */
+nav{position:fixed;left:0;right:0;bottom:0;height:74px;display:flex;
+  background:var(--superficie);border-top:1px solid var(--linea);
+  padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--texto-3);cursor:pointer;
+  display:grid;place-items:center;gap:4px;font-size:10px;letter-spacing:.1em;
+  font-family:'JetBrains Mono',monospace;transition:color .24s var(--curva)}
+nav button.activo{color:var(--lima)}
+@media (prefers-color-scheme: light){nav button.activo{color:#4A6B12}}
+nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7}
+
+#diagnostico{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--texto-3);
+  white-space:pre-wrap;line-height:1.6;margin-top:20px;padding-top:14px;
+  border-top:1px solid var(--linea);display:none}
+</style>
 </head>
 <body>
-  <h1>Pacer</h1>
 
-  <button id="hablar">Mantén presionado para hablar</button>
+<section class="pantalla activa" id="p-coach">
+  <p class="eyebrow">PACER</p>
+  <h1 class="display" id="saludo">Buenas</h1>
 
-  <p id="estado">Listo.</p>
+  <div class="orbe-zona"><div class="orbe" id="orbe"></div></div>
 
-  <div id="conversacion"></div>
+  <div class="transcripcion" id="transcripcion"></div>
+  <p class="eyebrow estado" id="estado">LISTO</p>
 
+  <div class="chips" id="chips"></div>
   <pre id="diagnostico"></pre>
+</section>
 
-  <script>
-    const boton = document.getElementById("hablar");
-    const estado = document.getElementById("estado");
-    const diagnostico = document.getElementById("diagnostico");
-    const conversacion = document.getElementById("conversacion");
+<section class="pantalla" id="p-plan">
+  <p class="eyebrow" id="eyebrow-plan">TU PLAN</p>
+  <h1 class="display">Tu plan <span class="tag acento-texto" id="tag-version" hidden></span></h1>
+  <div id="cuerpo-plan"></div>
+</section>
 
-    let grabadora = null;
-    let trozos = [];
+<section class="pantalla" id="p-agenda">
+  <p class="eyebrow">TU CARRERA OBJETIVO</p>
+  <h1 class="display">Agenda</h1>
+  <div id="cuerpo-agenda"></div>
+</section>
 
-    // Un solo elemento de audio, desbloqueado durante el gesto del usuario.
-    // En móvil, un play() que no nace de un toque queda a merced de la política
-    // de autoplay y puede tardar segundos o no sonar nunca.
-    const reproductor = new Audio();
-    let desbloqueado = false;
+<div class="controles" id="controles">
+  <button class="redondo" id="btn-diag" title="Diagnóstico">◐</button>
+  <button class="hablar" id="hablar">MANTÉN PARA HABLAR</button>
+</div>
 
-    function desbloquearAudio() {
-      if (desbloqueado) return;
-      desbloqueado = true;
-      reproductor.muted = true;
-      reproductor.play().catch(() => {});
-      reproductor.pause();
-      reproductor.muted = false;
+<nav>
+  <button data-p="coach" class="activo">
+    <svg viewBox="0 0 24 24"><path d="M3 12h3l2-6 4 12 3-9 2 3h4"/></svg>COACH</button>
+  <button data-p="plan">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>PLAN</button>
+  <button data-p="agenda">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>AGENDA</button>
+</nav>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const orbe = $('#orbe'), estado = $('#estado'), diag = $('#diagnostico');
+const transcripcion = $('#transcripcion');
+let turnos = [];
+
+const SUGERENCIAS = ['Quiero correr un 21k', '¿Qué me toca hoy?', 'Ayer acabé muerto'];
+
+function anotar(l){ diag.textContent += l + '\n'; }
+function ponerEstado(t){ estado.textContent = t; }
+
+/* Transcripción con desvanecido (§8): el turno actual grande, los anteriores
+   difuminándose. En voz no quieres un historial, quieres el turno con contexto. */
+function decir(quien, texto){
+  turnos.push({quien, texto});
+  turnos = turnos.slice(-3);
+  transcripcion.innerHTML = '';
+  const clases = ['actual','previo','viejo'];
+  turnos.forEach((t, i) => {
+    const p = document.createElement('p');
+    p.className = `turno ${clases[turnos.length-1-i]} ${t.quien==='mio'?'mio':'coach'}`;
+    p.textContent = t.texto;
+    transcripcion.appendChild(p);
+  });
+}
+
+(function saludar(){
+  const h = new Date().getHours();
+  $('#saludo').textContent = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  $('#chips').innerHTML = SUGERENCIAS.map(s => `<button class="chip">${s}</button>`).join('');
+})();
+
+document.querySelectorAll('nav button').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('activo'));
+    b.classList.add('activo');
+    document.querySelectorAll('.pantalla').forEach(s => s.classList.remove('activa'));
+    $('#p-' + b.dataset.p).classList.add('activa');
+    $('#controles').style.display = b.dataset.p === 'coach' ? 'flex' : 'none';
+    if (b.dataset.p !== 'coach') cargarPlan();
+  };
+});
+$('#btn-diag').onclick = () => {
+  diag.style.display = diag.style.display === 'block' ? 'none' : 'block';
+};
+
+/* Un solo elemento de audio, desbloqueado durante el gesto del usuario: en
+   móvil un play() que no nace de un toque queda a merced del autoplay. */
+const reproductor = new Audio();
+let desbloqueado = false;
+function desbloquearAudio(){
+  if (desbloqueado) return;
+  desbloqueado = true;
+  reproductor.muted = true;
+  reproductor.play().catch(() => {});
+  reproductor.pause();
+  reproductor.muted = false;
+}
+
+/* El halo del orbe responde al micrófono REAL (§7). Un bucle fijo se nota de
+   inmediato y mata la sensación de que el coach te está oyendo. */
+let audioCtx, analizador, datos, animando;
+function escucharVolumen(flujo){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    analizador = audioCtx.createAnalyser();
+    analizador.fftSize = 256;
+    audioCtx.createMediaStreamSource(flujo).connect(analizador);
+    datos = new Uint8Array(analizador.frequencyBinCount);
+    const pintar = () => {
+      analizador.getByteFrequencyData(datos);
+      const v = datos.reduce((a,b) => a+b, 0) / datos.length / 255;
+      orbe.style.boxShadow = `0 0 ${70 + v*130}px rgba(198,249,74,${.16 + v*.5})`;
+      animando = requestAnimationFrame(pintar);
+    };
+    pintar();
+  }catch(e){ /* sin analizador el orbe sigue respirando */ }
+}
+function dejarDeEscuchar(){
+  cancelAnimationFrame(animando);
+  orbe.style.boxShadow = '';
+}
+
+let grabadora = null, trozos = [];
+
+function extension(tipo){
+  if (tipo.includes('mp4')) return 'mp4';
+  if (tipo.includes('ogg')) return 'ogg';
+  return 'webm';
+}
+
+async function empezar(){
+  if (grabadora) return;
+  desbloquearAudio();
+
+  // navigator.mediaDevices solo existe en contexto seguro: HTTPS o localhost.
+  // Aplica a TODOS los navegadores, no solo a Safari.
+  if (!navigator.mediaDevices){
+    ponerEstado('SIN MICRÓFONO');
+    diag.style.display = 'block';
+    anotar('navigator.mediaDevices no existe · contexto seguro: ' + window.isSecureContext);
+    anotar('Se necesita HTTPS. En http:// solo funciona desde localhost.');
+    return;
+  }
+  try{
+    const flujo = await navigator.mediaDevices.getUserMedia({audio:true});
+    // 24 kbps alcanza de sobra para voz y recorta el archivo a la mitad.
+    grabadora = new MediaRecorder(flujo, {audioBitsPerSecond:24000});
+    trozos = [];
+    grabadora.ondataavailable = e => trozos.push(e.data);
+    grabadora.onstop = enviar;
+    grabadora.start();
+    escucharVolumen(flujo);
+    ponerEstado('ESCUCHANDO…');
+  }catch(err){
+    ponerEstado('SIN MICRÓFONO');
+    diag.style.display = 'block';
+    anotar('getUserMedia falló: ' + err.name);
+    grabadora = null;
+  }
+}
+
+function parar(){
+  if (!grabadora) return;
+  grabadora.stop();
+  grabadora.stream.getTracks().forEach(t => t.stop());
+  dejarDeEscuchar();
+  orbe.classList.add('pensando');
+  ponerEstado('PENSANDO…');
+}
+
+async function enviar(){
+  const tipo = grabadora.mimeType || 'audio/webm';
+  grabadora = null;
+  const cuerpo = new FormData();
+  cuerpo.append('audio', new Blob(trozos, {type:tipo}), 'turno.' + extension(tipo));
+  $('#hablar').disabled = true;
+
+  try{
+    const r = await fetch('/api/turno', {method:'POST', body:cuerpo});
+    const d = await r.json();
+    if (!r.ok){
+      ponerEstado('ERROR');
+      diag.style.display = 'block';
+      anotar((d.error || r.status) + ' · ' + (d.detalle || ''));
+      return;
     }
+    decir('mio', d.transcripcion);
+    decir('coach', d.respuesta);
+    if (d.herramientas?.length) anotar('herramientas: ' + d.herramientas.join(', '));
+    if (d.plan_version) anotar('plan v' + d.plan_version);
+    if (d.motivo_cambio) anotar('motivo: ' + d.motivo_cambio);
+    anotar(`respuesta ${d.latencia_ms.total} ms · voz→texto ${d.latencia_ms.transcripcion} · coach ${d.latencia_ms.coach}`);
+    ponerEstado('LISTO');
+    cargarPlan();
+    if (d.turno_id) reproducir(d.turno_id);
+  }catch(err){
+    ponerEstado('ERROR');
+    anotar('fetch falló: ' + err.message);
+  }finally{
+    orbe.classList.remove('pensando');
+    $('#hablar').disabled = false;
+  }
+}
 
-    function anotar(linea) {
-      diagnostico.textContent += linea + "\n";
-    }
+async function reproducir(id){
+  const t0 = performance.now();
+  try{
+    // fetch en vez de dejarle la descarga al <audio>: los móviles frenan la
+    // precarga de medios y eso son segundos de espera.
+    const r = await fetch('/api/voz/' + id);
+    if (!r.ok) return;
+    reproductor.src = URL.createObjectURL(await r.blob());
+    reproductor.onended = () => ponerEstado('LISTO');
+    await reproductor.play();
+    ponerEstado('HABLANDO…');
+    anotar(`voz suena a los ${Math.round(performance.now()-t0)} ms`);
+  }catch(err){ anotar('no se pudo reproducir: ' + err.message); }
+}
 
-    // El navegador decide el formato: Safari graba audio/mp4, Chrome audio/webm.
-    // Nunca se asume; se lee de la grabadora y se manda tal cual.
-    function extension(tipo) {
-      if (tipo.includes("mp4")) return "mp4";
-      if (tipo.includes("ogg")) return "ogg";
-      return "webm";
-    }
+const btn = $('#hablar');
+btn.addEventListener('mousedown', empezar);
+btn.addEventListener('mouseup', parar);
+btn.addEventListener('touchstart', e => {e.preventDefault(); empezar();});
+btn.addEventListener('touchend', e => {e.preventDefault(); parar();});
 
-    async function empezar() {
-      if (grabadora) return;
-      desbloquearAudio();
+const DIAS = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
+const NOMBRE = {facil:'Fácil', calidad:'Calidad', largo:'Largo'};
 
-      // navigator.mediaDevices solo existe en contexto seguro: HTTPS o localhost.
-      // Aplica a todos los navegadores, no solo a Safari.
-      if (!navigator.mediaDevices) {
-        estado.textContent = "Este navegador no expone el micrófono aquí.";
-        anotar("navigator.mediaDevices no existe.");
-        anotar("Contexto seguro: " + window.isSecureContext + " · origen: " + window.location.origin);
-        anotar("Se necesita HTTPS. En http:// solo funciona desde localhost.");
-        return;
-      }
+// Construir Date desde el ISO evita el corrimiento de un día por zona horaria.
+function fechaLocal(iso){ const [a,m,d] = iso.split('-').map(Number); return new Date(a,m-1,d); }
 
-      try {
-        const flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // 24 kbps alcanza de sobra para voz y recorta el archivo a la mitad:
-        // menos subida desde el teléfono y menos que procesar del otro lado.
-        grabadora = new MediaRecorder(flujo, { audioBitsPerSecond: 24000 });
-        trozos = [];
-        grabadora.ondataavailable = (e) => trozos.push(e.data);
-        grabadora.onstop = enviar;
-        grabadora.start();
-        estado.textContent = "Grabando…";
-      } catch (error) {
-        estado.textContent = "No se pudo abrir el micrófono.";
-        anotar("getUserMedia falló: " + error.name + " — " + error.message);
-        anotar("¿La página está en HTTPS? Safari lo exige salvo en localhost.");
-        grabadora = null;
-      }
-    }
+async function cargarPlan(){
+  let d;
+  try{ d = await (await fetch('/api/plan')).json(); }
+  catch{ return; }
 
-    function parar() {
-      if (!grabadora) return;
-      grabadora.stop();
-      grabadora.stream.getTracks().forEach((t) => t.stop());
-      estado.textContent = "Enviando…";
-    }
+  if (!d.hay_plan){
+    const vacio = `<p class="vacio-estado">Todavía no tienes plan. Cuéntale al coach qué carrera quieres correr y te lo arma.</p>`;
+    $('#cuerpo-plan').innerHTML = vacio;
+    $('#cuerpo-agenda').innerHTML = vacio;
+    return;
+  }
 
-    async function enviar() {
-      const tipo = grabadora.mimeType || "audio/webm";
-      grabadora = null;
+  $('#eyebrow-plan').textContent =
+    `${(d.objetivo || '').toUpperCase()}${d.fecha_carrera ? ' · ' + d.fecha_carrera : ''}`;
+  const tag = $('#tag-version');
+  tag.hidden = d.version < 2;
+  tag.textContent = 'v' + d.version;
 
-      const blob = new Blob(trozos, { type: tipo });
-      anotar("grabado " + blob.size + " bytes, tipo " + tipo);
+  const semana = d.semanas.find(s => s.numero === d.semana_actual) || d.semanas[0];
+  const pct = Math.round(d.semana_actual / d.semanas_totales * 100);
 
-      const cuerpo = new FormData();
-      cuerpo.append("audio", blob, "turno." + extension(tipo));
+  $('#cuerpo-plan').innerHTML = `
+    <div class="progreso">
+      <span class="eyebrow">SEMANA ${String(d.semana_actual).padStart(2,'0')} / ${d.semanas_totales}</span>
+      <span class="riel"><span style="width:${pct}%"></span></span>
+    </div>
+    ${d.motivo_cambio ? `<p class="vacio-estado" style="margin:0 0 16px">${d.motivo_cambio}</p>` : ''}
+    ${semana.sesiones.map(s => tarjeta(s, d.hoy)).join('')}
+    <button class="cta" id="ir-coach">PREGÚNTALE AL COACH</button>`;
+  $('#ir-coach').onclick = () => document.querySelector('nav button').click();
 
-      try {
-        const respuesta = await fetch("/api/turno", { method: "POST", body: cuerpo });
-        const datos = await respuesta.json();
+  $('#cuerpo-agenda').innerHTML = d.dias_para_carrera == null ? '' : `
+    <div class="tarjeta hoy" style="flex-direction:column;align-items:flex-start;gap:6px;padding:26px 22px;margin-top:20px">
+      <span class="cuenta">${d.dias_para_carrera}</span>
+      <span class="eyebrow">DÍAS</span>
+      <p class="titulo" style="margin-top:10px">${(d.objetivo || '').toUpperCase()}</p>
+      <span class="mono" style="font-size:13px;color:var(--texto-2)">${d.fecha_carrera}</span>
+    </div>`;
+}
 
-        if (!respuesta.ok) {
-          estado.textContent = "Error: " + (datos.error || respuesta.status);
-          anotar(datos.detalle || JSON.stringify(datos));
-          return;
-        }
+function tarjeta(s, hoy){
+  const f = fechaLocal(s.fecha);
+  return `<div class="tarjeta ${s.fecha === hoy ? 'hoy' : ''}">
+    <span class="barra ${s.tipo}"></span>
+    <span class="cuerpo">
+      <span class="dia mono">${DIAS[f.getDay()]} ${String(f.getDate()).padStart(2,'0')}</span>
+      <div class="tipo">${NOMBRE[s.tipo] || s.tipo}</div>
+      ${s.completada ? `<span class="hecha mono">HECHA · ${s.sensacion || ''}</span>` : ''}
+    </span>
+    <span class="km">${s.km}<span style="font-size:12px;color:var(--texto-3)"> km</span></span>
+  </div>`;
+}
 
-        decir("Tú", datos.transcripcion);
-        decir("Coach", datos.respuesta);
-
-        if (datos.herramientas.length) {
-          anotar("herramientas: " + datos.herramientas.join(", "));
-        }
-        if (datos.plan_version) {
-          anotar("plan v" + datos.plan_version);
-        }
-        if (datos.motivo_cambio) {
-          anotar("motivo: " + datos.motivo_cambio);
-        }
-        const l = datos.latencia_ms;
-        anotar(`respuesta en ${l.total} ms · voz→texto ${l.transcripcion} · coach ${l.coach}`);
-
-        // El texto ya está en pantalla; la voz llega después y no lo bloquea.
-        estado.textContent = "Listo.";
-        if (datos.turno_id) {
-          reproducir(datos.turno_id);
-        }
-      } catch (error) {
-        estado.textContent = "Falló el envío.";
-        anotar("fetch falló: " + error.message);
-      }
-    }
-
-    function decir(quien, texto) {
-      const linea = document.createElement("p");
-      linea.textContent = quien + ": " + texto;
-      conversacion.appendChild(linea);
-      linea.scrollIntoView();
-    }
-
-    async function reproducir(turnoId) {
-      const arranque = performance.now();
-      try {
-        // fetch en vez de dejarle la descarga al <audio>: los móviles frenan la
-        // precarga de medios para ahorrar datos, y eso son segundos de espera.
-        const respuesta = await fetch("/api/voz/" + turnoId);
-        if (!respuesta.ok) {
-          anotar("sin audio para este turno");
-          return;
-        }
-        const blob = await respuesta.blob();
-        const descarga = Math.round(performance.now() - arranque);
-
-        reproductor.src = URL.createObjectURL(blob);
-        await reproductor.play();
-        anotar(`voz: descarga ${descarga} ms · suena a los ${Math.round(performance.now() - arranque)} ms`);
-      } catch (error) {
-        anotar("no se pudo reproducir: " + error.message);
-      }
-    }
-
-    boton.addEventListener("mousedown", empezar);
-    boton.addEventListener("mouseup", parar);
-    boton.addEventListener("touchstart", (e) => { e.preventDefault(); empezar(); });
-    boton.addEventListener("touchend", (e) => { e.preventDefault(); parar(); });
-  </script>
+cargarPlan();
+</script>
 </body>
 </html>
