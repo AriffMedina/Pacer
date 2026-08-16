@@ -106,12 +106,13 @@
           anotar("motivo: " + datos.motivo_cambio);
         }
         const l = datos.latencia_ms;
-        anotar(`latencia ${l.total} ms · voz→texto ${l.transcripcion} · coach ${l.coach} · texto→voz ${l.voz}`);
+        anotar(`respuesta en ${l.total} ms · voz→texto ${l.transcripcion} · coach ${l.coach}`);
 
-        if (datos.audio_base64) {
-          await reproducir(datos.audio_base64);
-        }
+        // El texto ya está en pantalla; la voz llega después y no lo bloquea.
         estado.textContent = "Listo.";
+        if (datos.turno_id) {
+          reproducir(datos.turno_id);
+        }
       } catch (error) {
         estado.textContent = "Falló el envío.";
         anotar("fetch falló: " + error.message);
@@ -125,10 +126,12 @@
       linea.scrollIntoView();
     }
 
-    async function reproducir(base64) {
-      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
-      const audio = new Audio(url);
+    async function reproducir(turnoId) {
+      const arranque = performance.now();
+      const audio = new Audio("/api/voz/" + turnoId);
+      audio.addEventListener("playing", () => {
+        anotar(`voz sonando ${Math.round(performance.now() - arranque)} ms después`);
+      });
       try {
         await audio.play();
       } catch (error) {

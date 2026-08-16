@@ -5,17 +5,18 @@ transcripción y la latencia. El cajón de diagnóstico no es adorno: sin él, u
 turno lento y un turno roto se ven igual desde el teléfono.
 """
 
-import base64
 import time
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -51,6 +52,19 @@ class SesionEnMemoria:
 
 
 sesion = SesionEnMemoria()
+
+# Respuestas esperando ser sintetizadas. Se guardan pocas y se descartan las
+# viejas: nadie pide la voz de un turno de hace veinte turnos.
+_PENDIENTES: OrderedDict[str, str] = OrderedDict()
+MAX_PENDIENTES = 20
+
+
+def _guardar_para_voz(texto: str) -> str:
+    turno_id = uuid4().hex[:12]
+    _PENDIENTES[turno_id] = texto
+    while len(_PENDIENTES) > MAX_PENDIENTES:
+        _PENDIENTES.popitem(last=False)
+    return turno_id
 
 
 @asynccontextmanager
@@ -130,7 +144,7 @@ async def turno(audio: UploadFile) -> JSONResponse:
             hoy=hoy,
         )
 
-    ms_coach = int((time.perf_counter() - arranque) * 1000)
+    ms_total = int((time.perf_counter() - arranque) * 1000)
 
     sesion.perfil = resultado.perfil
     sesion.mensajes = resultado.mensajes
@@ -138,25 +152,36 @@ async def turno(audio: UploadFile) -> JSONResponse:
         {"role": "assistant", "content": [{"text": resultado.texto or "..."}]}
     )
 
-    voz = app.state.tts.sintetizar(resultado.texto) if resultado.texto else b""
-    ms_total = int((time.perf_counter() - arranque) * 1000)
+    # La voz NO se sintetiza aquí. El texto se devuelve en cuanto está y el
+    # audio se pide aparte: así el usuario lee la respuesta segundos antes de
+    # oírla, y un turno en modo texto no gasta una llamada a Polly.
+    turno_id = _guardar_para_voz(resultado.texto)
 
     return JSONResponse(
         {
             "transcripcion": transcripcion.texto,
             "respuesta": resultado.texto,
-            "audio_base64": base64.b64encode(voz).decode(),
+            "turno_id": turno_id,
             "herramientas": list(resultado.herramientas_usadas),
             "plan_version": resultado.plan.version if resultado.plan else None,
             "motivo_cambio": resultado.plan.motivo_cambio if resultado.plan else None,
             "latencia_ms": {
                 "transcripcion": ms_stt,
-                "coach": ms_coach - ms_stt,
-                "voz": ms_total - ms_coach,
+                "coach": ms_total - ms_stt,
                 "total": ms_total,
             },
         }
     )
+
+
+@app.get("/api/voz/{turno_id}")
+async def voz(turno_id: str) -> Response:
+    """Sintetiza la respuesta de un turno. Se pide después de mostrar el texto."""
+    texto = _PENDIENTES.get(turno_id)
+    if not texto:
+        return Response(status_code=404)
+
+    return Response(app.state.tts.sintetizar(texto), media_type="audio/mpeg")
 
 
 @app.get("/api/salud")

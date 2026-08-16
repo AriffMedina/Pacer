@@ -4,7 +4,6 @@ Ni Groq ni Polly ni Bedrock se tocan aquí, y la base es un archivo temporal:
 un test que le escribe a la base real o gasta llamadas de API no es un test.
 """
 
-import base64
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -61,20 +60,45 @@ def audio_de_prueba() -> dict[str, Any]:
     return {"audio": ("turno.webm", b"bytes-de-audio", "audio/webm")}
 
 
-def test_un_turno_devuelve_transcripcion_respuesta_y_voz(cliente: TestClient) -> None:
+def test_un_turno_devuelve_transcripcion_y_texto(cliente: TestClient) -> None:
     respuesta = cliente.post("/api/turno", files=audio_de_prueba())
 
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
     assert cuerpo["transcripcion"] == "quiero correr un medio maratón"
     assert "carrera" in cuerpo["respuesta"]
-    assert base64.b64decode(cuerpo["audio_base64"]) == b"mp3-de-mentira"
+    assert cuerpo["turno_id"]
+
+
+def test_la_sintesis_no_esta_en_el_camino_critico(cliente: TestClient) -> None:
+    # Si el turno devolviera audio, este TTS explotaría y el turno fallaría.
+    class TTSQueExplota:
+        def sintetizar(self, texto: str) -> bytes:
+            raise AssertionError("no debe sintetizarse durante el turno")
+
+    cliente.app.state.tts = TTSQueExplota()
+
+    assert cliente.post("/api/turno", files=audio_de_prueba()).status_code == 200
+
+
+def test_la_voz_se_pide_aparte_con_el_id_del_turno(cliente: TestClient) -> None:
+    turno_id = cliente.post("/api/turno", files=audio_de_prueba()).json()["turno_id"]
+
+    voz = cliente.get(f"/api/voz/{turno_id}")
+
+    assert voz.status_code == 200
+    assert voz.headers["content-type"] == "audio/mpeg"
+    assert voz.content == b"mp3-de-mentira"
+
+
+def test_un_turno_inexistente_no_devuelve_audio(cliente: TestClient) -> None:
+    assert cliente.get("/api/voz/noexiste").status_code == 404
 
 
 def test_reporta_la_latencia_por_etapa(cliente: TestClient) -> None:
     cuerpo = cliente.post("/api/turno", files=audio_de_prueba()).json()
 
-    for etapa in ("transcripcion", "coach", "voz", "total"):
+    for etapa in ("transcripcion", "coach", "total"):
         assert etapa in cuerpo["latencia_ms"]
 
 
