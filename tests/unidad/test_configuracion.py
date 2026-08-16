@@ -29,6 +29,28 @@ def test_sqlite_no_se_confunde_con_postgres() -> None:
     assert not config.es_postgres
 
 
+def test_langfuse_base_url_le_gana_a_langfuse_host() -> None:
+    config = Configuracion(
+        _env_file=None,
+        langfuse_host="http://localhost:3000",
+        langfuse_base_url="https://cloud.langfuse.com",
+    )
+
+    assert config.langfuse_url == "https://cloud.langfuse.com"
+
+
+def test_sin_base_url_se_usa_el_host() -> None:
+    config = Configuracion(_env_file=None, langfuse_host="http://localhost:3000")
+
+    assert config.langfuse_url == "http://localhost:3000"
+
+
+def test_sin_llaves_de_langfuse_no_hay_observabilidad() -> None:
+    config = Configuracion(_env_file=None)
+
+    assert not config.observabilidad_disponible
+
+
 def test_sin_llave_de_groq_lo_dice_en_vez_de_reventar() -> None:
     config = Configuracion(_env_file=None)
 

@@ -7,6 +7,7 @@ Cifras de `paramethers.md`. El 20% de calidad se reparte sobre kilómetros, no
 sobre número de sesiones: es la métrica correcta (§5).
 """
 
+from dataclasses import replace
 from datetime import date, timedelta
 
 from pacer.domain.entidades.plan import Plan, Semana, Sesion, TipoSesion
@@ -17,11 +18,12 @@ from pacer.domain.reglas.duracion import (
     descarga_en_base,
     validar_duracion,
 )
+from pacer.domain.reglas.largo import LARGO_PCT, largo_maximo_permitido
 from pacer.domain.reglas.periodizacion import repartir_bloques
 from pacer.domain.reglas.progresion import PROGRESION_SEMANAL_MAX
 
-LARGO_PCT = {"5k": 0.28, "10k": 0.30, "21k": 0.33, "maraton": 0.33}
 CALIDAD_PCT = 0.20
+MARGEN_DE_REDONDEO = 1.01
 TAPER_REDUCCION_VOLUMEN = 0.50
 # Cuánto más largo es el largo que una sesión fácil cuando hay que rebalancear.
 PESO_LARGO = 1.3
@@ -71,23 +73,63 @@ def generar_plan(
     construidas = []
 
     numero = 0
+    largos_recientes: list[float] = []
+
     for bloque in ORDEN_BLOQUES:
         for _ in range(bloques[bloque]):
             volumen, es_descarga = volumenes[numero]
-            construidas.append(
-                _armar_semana(
-                    numero=numero + 1,
-                    bloque=bloque,
-                    km_total=volumen,
-                    es_descarga=es_descarga,
-                    dias=dias,
-                    distancia=distancia,
-                    inicio=primer_dia + timedelta(weeks=numero),
-                )
+            semana = _armar_semana(
+                numero=numero + 1,
+                bloque=bloque,
+                km_total=volumen,
+                es_descarga=es_descarga,
+                dias=dias,
+                distancia=distancia,
+                inicio=primer_dia + timedelta(weeks=numero),
             )
+            semana = _frenar_por_el_largo(semana, distancia, largos_recientes)
+
+            largo = semana.largo
+            largos_recientes.append(largo.km if largo else 0.0)
+            construidas.append(semana)
             numero += 1
 
-    return Plan(version=1, semanas=tuple(construidas))
+    return Plan(version=1, semanas=tuple(_bajar_desde_la_carga_real(construidas)))
+
+
+def _bajar_desde_la_carga_real(semanas: list[Semana]) -> list[Semana]:
+    """El tapering baja desde donde el corredor está, no desde la tendencia.
+
+    Si la restricción del largo recortó la semana pico, el taper calculado
+    sobre la tendencia teórica puede quedar POR ENCIMA de la última semana de
+    carga. Un taper que sube no es un taper.
+    """
+    de_carga = [s for s in semanas if s.bloque != "tapering"]
+    taper = [s for s in semanas if s.bloque == "tapering"]
+    if not de_carga or not taper:
+        return semanas
+
+    techo = de_carga[-1].km_total
+    # La primera semana de taper debe quedar en su fracción del pico REAL. Se
+    # deduce el factor de ahí y se aplica a todas por igual, para que la curva
+    # descendente del taper se conserve.
+    objetivo = techo * (1 - TAPER_REDUCCION_VOLUMEN / len(taper))
+    if taper[0].km_total <= objetivo:
+        return semanas
+
+    factor = objetivo / taper[0].km_total
+
+    return [
+        replace(
+            semana,
+            sesiones=tuple(
+                replace(s, km=round(s.km * factor, 1)) for s in semana.sesiones
+            ),
+        )
+        if semana.bloque == "tapering"
+        else semana
+        for semana in semanas
+    ]
 
 
 def _volumenes_por_semana(
@@ -177,7 +219,48 @@ def _armar_semana(
 
     sesiones.append(_sesion(inicio, dia, "largo", km_largo))
 
-    return Semana(numero=numero, sesiones=tuple(sesiones), es_descarga=es_descarga)
+    return Semana(
+        numero=numero,
+        sesiones=tuple(sesiones),
+        es_descarga=es_descarga,
+        bloque=bloque,
+    )
+
+
+def _frenar_por_el_largo(
+    semana: Semana, distancia: str, largos_recientes: list[float]
+) -> Semana:
+    """Recorta la semana entera si su long run se pasa del techo permitido.
+
+    Se escala TODA la semana en la misma proporción, no solo el largo. Si la
+    salida larga no puede crecer, el volumen semanal tampoco debería: recortar
+    únicamente el largo dejaría una semana con la carga alta repartida en
+    sesiones fáciles, que es la misma carga por otro camino.
+
+    Escalar preserva el resto de invariantes: el reparto fácil/calidad es una
+    proporción, y el largo sigue siendo la sesión más larga.
+    """
+    largo = semana.largo
+    if largo is None or largo.km <= 0:
+        return semana
+
+    permitido = largo_maximo_permitido(distancia, largos_recientes)
+
+    # El margen del 1% distingue un recorte real de un desborde por redondeo:
+    # el largo crece justo al 10% y se pasa por centésimas casi cada semana.
+    # Sin esto, todas las semanas quedarían marcadas y la bandera no diría nada.
+    if largo.km <= permitido * MARGEN_DE_REDONDEO:
+        return semana
+
+    factor = permitido / largo.km
+    return replace(
+        semana,
+        recortada=True,
+        sesiones=tuple(
+            replace(sesion, km=round(sesion.km * factor, 1))
+            for sesion in semana.sesiones
+        ),
+    )
 
 
 def _sesion(inicio: date, desplazamiento: int, tipo: TipoSesion, km: float) -> Sesion:

@@ -11,12 +11,23 @@ from typing import Any
 import boto3
 
 from pacer.domain.puertos.llm import LlamadaHerramienta, RespuestaLLM
+from pacer.domain.puertos.observabilidad import (
+    TIPO_GENERACION,
+    PuertoObservabilidad,
+    SinObservabilidad,
+)
 
 
 class AdaptadorBedrock:
-    def __init__(self, model_id: str, region: str) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        region: str,
+        observabilidad: PuertoObservabilidad | None = None,
+    ) -> None:
         self._cliente = boto3.client("bedrock-runtime", region_name=region)
         self._model_id = model_id
+        self._trazas = observabilidad or SinObservabilidad()
 
     def conversar(
         self,
@@ -24,14 +35,30 @@ class AdaptadorBedrock:
         mensajes: list[dict[str, Any]],
         herramientas: dict[str, Any],
     ) -> RespuestaLLM:
-        respuesta = self._cliente.converse(
-            modelId=self._model_id,
-            system=[{"text": sistema}],
-            messages=mensajes,
-            toolConfig=herramientas,
-            inferenceConfig={"temperature": 0},
-        )
-        return interpretar_respuesta(respuesta)
+        with self._trazas.observar(
+            nombre="coach",
+            tipo=TIPO_GENERACION,
+            entrada={"sistema": sistema, "mensajes": mensajes},
+            modelo=self._model_id,
+            metadatos={"herramientas": [t["toolSpec"]["name"] for t in herramientas["tools"]]},
+        ) as traza:
+            respuesta = self._cliente.converse(
+                modelId=self._model_id,
+                system=[{"text": sistema}],
+                messages=mensajes,
+                toolConfig=herramientas,
+                inferenceConfig={"temperature": 0},
+            )
+            interpretada = interpretar_respuesta(respuesta)
+
+            traza.registrar_salida(
+                {
+                    "texto": interpretada.texto,
+                    "herramientas_pedidas": [ll.nombre for ll in interpretada.llamadas],
+                    "uso": respuesta.get("usage"),
+                }
+            )
+            return interpretada
 
 
 def interpretar_respuesta(respuesta: dict[str, Any]) -> RespuestaLLM:

@@ -11,15 +11,34 @@
   <button id="hablar">Mantén presionado para hablar</button>
 
   <p id="estado">Listo.</p>
+
+  <div id="conversacion"></div>
+
   <pre id="diagnostico"></pre>
 
   <script>
     const boton = document.getElementById("hablar");
     const estado = document.getElementById("estado");
     const diagnostico = document.getElementById("diagnostico");
+    const conversacion = document.getElementById("conversacion");
 
     let grabadora = null;
     let trozos = [];
+
+    // Un solo elemento de audio, desbloqueado durante el gesto del usuario.
+    // En móvil, un play() que no nace de un toque queda a merced de la política
+    // de autoplay y puede tardar segundos o no sonar nunca.
+    const reproductor = new Audio();
+    let desbloqueado = false;
+
+    function desbloquearAudio() {
+      if (desbloqueado) return;
+      desbloqueado = true;
+      reproductor.muted = true;
+      reproductor.play().catch(() => {});
+      reproductor.pause();
+      reproductor.muted = false;
+    }
 
     function anotar(linea) {
       diagnostico.textContent += linea + "\n";
@@ -35,6 +54,7 @@
 
     async function empezar() {
       if (grabadora) return;
+      desbloquearAudio();
 
       // navigator.mediaDevices solo existe en contexto seguro: HTTPS o localhost.
       // Aplica a todos los navegadores, no solo a Safari.
@@ -48,7 +68,9 @@
 
       try {
         const flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
-        grabadora = new MediaRecorder(flujo);
+        // 24 kbps alcanza de sobra para voz y recorta el archivo a la mitad:
+        // menos subida desde el teléfono y menos que procesar del otro lado.
+        grabadora = new MediaRecorder(flujo, { audioBitsPerSecond: 24000 });
         trozos = [];
         grabadora.ondataavailable = (e) => trozos.push(e.data);
         grabadora.onstop = enviar;
@@ -81,16 +103,65 @@
 
       try {
         const respuesta = await fetch("/api/turno", { method: "POST", body: cuerpo });
+        const datos = await respuesta.json();
+
         if (!respuesta.ok) {
-          estado.textContent = "El servidor respondió " + respuesta.status + ".";
+          estado.textContent = "Error: " + (datos.error || respuesta.status);
+          anotar(datos.detalle || JSON.stringify(datos));
           return;
         }
-        const audio = new Audio(URL.createObjectURL(await respuesta.blob()));
-        await audio.play();
+
+        decir("Tú", datos.transcripcion);
+        decir("Coach", datos.respuesta);
+
+        if (datos.herramientas.length) {
+          anotar("herramientas: " + datos.herramientas.join(", "));
+        }
+        if (datos.plan_version) {
+          anotar("plan v" + datos.plan_version);
+        }
+        if (datos.motivo_cambio) {
+          anotar("motivo: " + datos.motivo_cambio);
+        }
+        const l = datos.latencia_ms;
+        anotar(`respuesta en ${l.total} ms · voz→texto ${l.transcripcion} · coach ${l.coach}`);
+
+        // El texto ya está en pantalla; la voz llega después y no lo bloquea.
         estado.textContent = "Listo.";
+        if (datos.turno_id) {
+          reproducir(datos.turno_id);
+        }
       } catch (error) {
         estado.textContent = "Falló el envío.";
         anotar("fetch falló: " + error.message);
+      }
+    }
+
+    function decir(quien, texto) {
+      const linea = document.createElement("p");
+      linea.textContent = quien + ": " + texto;
+      conversacion.appendChild(linea);
+      linea.scrollIntoView();
+    }
+
+    async function reproducir(turnoId) {
+      const arranque = performance.now();
+      try {
+        // fetch en vez de dejarle la descarga al <audio>: los móviles frenan la
+        // precarga de medios para ahorrar datos, y eso son segundos de espera.
+        const respuesta = await fetch("/api/voz/" + turnoId);
+        if (!respuesta.ok) {
+          anotar("sin audio para este turno");
+          return;
+        }
+        const blob = await respuesta.blob();
+        const descarga = Math.round(performance.now() - arranque);
+
+        reproductor.src = URL.createObjectURL(blob);
+        await reproductor.play();
+        anotar(`voz: descarga ${descarga} ms · suena a los ${Math.round(performance.now() - arranque)} ms`);
+      } catch (error) {
+        anotar("no se pudo reproducir: " + error.message);
       }
     }
 
