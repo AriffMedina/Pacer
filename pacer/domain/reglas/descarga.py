@@ -1,10 +1,11 @@
-"""Parámetros de descarga. Cifras tomadas de `paramethers.md` §6 (grado C).
+"""Factor de descarga. Cifra de `paramethers.md` §6 (grado C).
 
-`FACTOR_VOLUMEN` se reutiliza para el ajuste reactivo del ajustador: se recorta
-volumen, nunca días ni intensidad. Es el mismo principio del tapering aplicado
-en pequeño.
+La cadencia y la exención del bloque base dependen del nivel y viven en
+`duracion.py`. Acá queda solo el factor, que es el mismo para todos.
+
+`FACTOR_VOLUMEN` se reutiliza en el ajustador reactivo: se recorta volumen,
+nunca días ni intensidad. Es el principio del tapering aplicado en pequeño.
 """
 
 FACTOR_VOLUMEN = 0.65
-CADA_N_SEMANAS = 4
-CADA_N_SEMANAS_PRINCIPIANTE = 3
+MANTENER_CALIDAD = True

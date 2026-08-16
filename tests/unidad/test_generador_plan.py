@@ -1,9 +1,11 @@
 from datetime import date
+from itertools import pairwise
 
 from pacer.domain.servicios.generador_plan import generar_plan
 
 PERFIL = {
     "distancia": "21k",
+    "nivel": "intermedio",
     "semanas": 12,
     "km_semana": 25,
     "dias": 4,
@@ -41,9 +43,10 @@ def test_las_semanas_de_descarga_bajan_el_volumen() -> None:
 def test_ninguna_semana_normal_sube_mas_de_diez_por_ciento() -> None:
     plan = plan_base()
 
-    for previa, actual in zip(plan.semanas, plan.semanas[1:]):
-        if not actual.es_descarga:
-            assert actual.km_total <= previa.km_total * 1.10 + 0.5
+    de_carga = [semana for semana in plan.semanas if not semana.es_descarga]
+
+    for previa, actual in pairwise(de_carga):
+        assert actual.km_total <= previa.km_total * 1.10 + 0.5
 
 
 def test_al_menos_78_por_ciento_de_los_km_son_faciles() -> None:
