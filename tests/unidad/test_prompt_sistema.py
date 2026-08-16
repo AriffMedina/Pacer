@@ -21,6 +21,19 @@ def test_ordena_guardar_antes_de_preguntar() -> None:
     assert "Guardar primero, preguntar después" in prompt
 
 
+def test_limita_el_largo_porque_el_texto_se_vuelve_audio() -> None:
+    prompt = construir_prompt()
+
+    assert "MÁXIMO 2 frases" in prompt
+    assert "UNA sola pregunta" in prompt
+
+
+def test_prohibe_listas_y_negritas() -> None:
+    prompt = construir_prompt()
+
+    assert "Nada de listas" in prompt
+
+
 def test_ordena_registrar_la_sesion_sin_esperar_los_kilometros() -> None:
     prompt = construir_prompt()
 

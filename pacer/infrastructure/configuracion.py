@@ -30,6 +30,10 @@ class Configuracion(BaseSettings):
     # us-east-1 y no us-east-2: allá Polly no tiene voces neural para es-MX.
     aws_region: str = "us-east-1"
 
+    # `generative` suena mejor; `neural` sintetiza más rápido. Configurable para
+    # poder medir el intercambio sin tocar código.
+    motor_tts: str = "generative"
+
     groq_api_key: str = ""
     telegram_bot_token: str = ""
     langfuse_public_key: str = ""

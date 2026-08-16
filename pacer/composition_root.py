@@ -49,4 +49,4 @@ def construir_stt(config: Configuracion | None = None) -> AdaptadorGroqWhisper |
 
 def construir_tts(config: Configuracion | None = None) -> AdaptadorPolly:
     conf = config or configuracion()
-    return AdaptadorPolly(region=conf.aws_region, voz=VOZ_TTS, motor=MOTOR_TTS)
+    return AdaptadorPolly(region=conf.aws_region, voz=VOZ_TTS, motor=conf.motor_tts)
