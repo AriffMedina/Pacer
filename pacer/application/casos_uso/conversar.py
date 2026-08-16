@@ -9,10 +9,13 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 
+from pacer.application.casos_uso.crear_plan import crear_plan
 from pacer.application.herramientas.despachador import despachar
 from pacer.application.herramientas.esquemas import catalogo_para_bedrock
 from pacer.domain.entidades.perfil import Perfil
+from pacer.domain.entidades.plan import Plan
 from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
+from pacer.domain.reglas.duracion import PlanImposible
 
 MAX_VUELTAS = 4
 
@@ -32,6 +35,7 @@ class ResultadoTurno:
     mensajes: list[dict[str, Any]]
     vueltas: int
     herramientas_usadas: tuple[str, ...]
+    plan: Plan | None = None
     corto_por_limite: bool = False
 
 
@@ -40,6 +44,9 @@ def procesar_turno(
     sistema: str,
     mensajes: list[dict[str, Any]],
     perfil: Perfil,
+    *,
+    hoy: date,
+    plan: Plan | None = None,
     max_vueltas: int = MAX_VUELTAS,
 ) -> ResultadoTurno:
     """Corre el ciclo pedir-ejecutar-responder hasta que el modelo cierre el turno."""
@@ -57,6 +64,7 @@ def procesar_turno(
                 mensajes=historial,
                 vueltas=vuelta,
                 herramientas_usadas=tuple(usadas),
+                plan=plan,
             )
 
         historial.append(respuesta.mensaje)
@@ -65,8 +73,13 @@ def procesar_turno(
         for llamada in respuesta.llamadas:
             usadas.append(llamada.nombre)
             resultado = despachar(llamada.nombre, llamada.entrada, perfil)
-            if llamada.nombre == "actualizar_perfil" and "error" not in resultado:
-                perfil = _aplicar_actualizacion(perfil, llamada.entrada)
+
+            if "error" not in resultado:
+                if llamada.nombre == "actualizar_perfil":
+                    perfil = _aplicar_actualizacion(perfil, llamada.entrada)
+                elif llamada.nombre == "generar_plan":
+                    plan, resultado = _generar(perfil, hoy)
+
             resultados.append((llamada, resultado))
 
         historial.append(_mensaje_de_resultados(resultados))
@@ -77,8 +90,34 @@ def procesar_turno(
         mensajes=historial,
         vueltas=max_vueltas,
         herramientas_usadas=tuple(usadas),
+        plan=plan,
         corto_por_limite=True,
     )
+
+
+def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:
+    """Genera el plan y devuelve un RESUMEN al modelo, nunca el plan entero.
+
+    Mandarle las semanas completas gastaría tokens sin darle nada que decidir:
+    el modelo explica el plan, no lo lee sesión por sesión.
+    """
+    try:
+        nuevo = crear_plan(perfil, hoy=hoy)
+    except PlanImposible as rechazo:
+        return None, {
+            "error": "meta_inalcanzable",
+            "motivo": rechazo.motivo,
+            "semanas_minimas": rechazo.minimo,
+            "alternativas": ["mover la fecha de la carrera", "bajar la distancia"],
+        }
+
+    de_carga = [semana for semana in nuevo.semanas if not semana.es_descarga]
+    return nuevo, {
+        "ok": True,
+        "semanas": len(nuevo.semanas),
+        "km_primera_semana": nuevo.semanas[0].km_total,
+        "km_pico": max(semana.km_total for semana in de_carga),
+    }
 
 
 def _mensaje_de_resultados(
