@@ -26,6 +26,20 @@ class Semana:
     numero: int
     sesiones: tuple[Sesion, ...]
     es_descarga: bool = False
+    bloque: str = ""
+    """base, construccion, pico o tapering. El plan se describe a sí mismo."""
+
+    recortada: bool = False
+    """La restricción del long run bajó esta semana por debajo de su objetivo.
+
+    Se registra porque cambia cómo se lee la semana siguiente: volver a la
+    tendencia después de un recorte de seguridad no es una progresión, igual
+    que no lo es salir de una descarga.
+    """
+
+    @property
+    def largo(self) -> Sesion | None:
+        return next((s for s in self.sesiones if s.tipo == "largo"), None)
 
     @property
     def km_total(self) -> float:
