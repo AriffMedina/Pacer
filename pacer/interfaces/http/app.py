@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from pacer.application.casos_uso.atender_telegram import atender_mensaje_de_telegram
 from pacer.application.casos_uso.atender_turno import atender_turno
 from pacer.application.contexto.bloque_estado import construir_bloque
 from pacer.application.contexto.prompt_sistema import construir_prompt
@@ -31,12 +32,15 @@ from pacer.composition_root import (
     construir_llm,
     construir_observabilidad,
     construir_stt,
+    construir_telegram,
     construir_tts,
 )
 from pacer.domain.entidades.perfil import Perfil
+from pacer.domain.puertos.notificacion import MensajeEntrante
 from pacer.domain.puertos.voz import ErrorDeTranscripcion
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
+from pacer.interfaces.worker.sondeo_telegram import sondear
 
 DIRECTORIO_WEB = Path(__file__).resolve().parents[3] / "web"
 
@@ -122,10 +126,41 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
 
     await _calentar_voz(app, config.calentar_voz)
 
+    app.state.telegram = construir_telegram(config)
+    sondeo = _arrancar_sondeo(app)
+
     yield
 
+    if sondeo is not None:
+        sondeo.cancel()
+    if app.state.telegram is not None:
+        app.state.telegram.cerrar()
     app.state.trazas.cerrar()
     await motor.dispose()
+
+
+def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
+    """Escucha Telegram en segundo plano mientras la app viva."""
+    canal = app.state.telegram
+    if canal is None:
+        return None
+
+    async def atender(mensaje: MensajeEntrante) -> None:
+        async with app.state.fabrica() as bd:
+            await atender_mensaje_de_telegram(
+                mensaje,
+                llm=app.state.llm,
+                stt=app.state.stt,
+                canal=canal,
+                repositorio=RepositorioPlan(bd),
+                sistema=construir_prompt(),
+                historial=sesion.mensajes,
+                perfil=sesion.perfil,
+                corredor_id=CORREDOR_PILOTO,
+                hoy=datetime.now(UTC).date(),
+            )
+
+    return asyncio.create_task(sondear(canal, atender))
 
 
 app = FastAPI(title="Pacer", lifespan=ciclo_de_vida)

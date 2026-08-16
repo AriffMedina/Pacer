@@ -58,6 +58,9 @@ def _app_levantada(
     # cada arranque abre un cliente real y hace flush contra la nube al cerrar.
     os.environ["LANGFUSE_PUBLIC_KEY"] = ""
     os.environ["LANGFUSE_SECRET_KEY"] = ""
+    # Sin token no arranca el sondeo. Con él, cada TestClient abriría un long
+    # polling real contra Telegram: los tests pasaron de 9.7 a 14.5 segundos.
+    os.environ["TELEGRAM_BOT_TOKEN"] = ""
 
     from pacer.interfaces.http import app as modulo
 
