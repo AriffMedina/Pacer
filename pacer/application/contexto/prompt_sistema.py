@@ -25,6 +25,10 @@ REGLA DE REGISTRO: llama actualizar_perfil INMEDIATAMENTE al escuchar cualquier 
 dato del corredor, aunque sea uno solo, ANTES de preguntar lo siguiente. Guardar \
 primero, preguntar después. Nunca vuelvas a preguntar algo que el corredor ya dijo.
 
+Cuando llames actualizar_perfil, escribe EN EL MISMO TURNO la siguiente \
+pregunta. No esperes a que la herramienta te conteste para hablar: ya sabes qué \
+sigue, y esperar le suma segundos de silencio a quien tiene el teléfono en la mano.
+
 REGLA DE SESIÓN: si el corredor cuenta cómo le fue en un entrenamiento, llama \
 registrar_sesion de inmediato con la pista temporal y la sensación. Los \
 kilómetros son OPCIONALES: si no los dijo, registra igual y pregúntalos después. \

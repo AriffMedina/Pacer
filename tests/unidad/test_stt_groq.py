@@ -24,18 +24,22 @@ class RespuestaFalsa:
 
 
 def simular(monkeypatch: pytest.MonkeyPatch, *codigos: int) -> list[int]:
-    """Devuelve una respuesta por llamada y registra cuántas hubo."""
+    """Devuelve una respuesta por llamada y registra cuántas hubo.
+
+    Se parchea `httpx.Client.post` y no `httpx.post`: el adaptador usa un
+    cliente persistente para no rehacer el handshake TLS en cada turno.
+    """
     llamadas: list[int] = []
     secuencia = list(codigos)
 
-    def post_falso(*args: Any, **kwargs: Any) -> RespuestaFalsa:
+    def post_falso(self: Any, *args: Any, **kwargs: Any) -> RespuestaFalsa:
         codigo = secuencia[len(llamadas)]
         llamadas.append(codigo)
         if codigo == 200:
             return RespuestaFalsa(200, {"text": "hola", "duration": 1.0})
         return RespuestaFalsa(codigo)
 
-    monkeypatch.setattr(httpx, "post", post_falso)
+    monkeypatch.setattr(httpx.Client, "post", post_falso)
     return llamadas
 
 VERBOSE = {

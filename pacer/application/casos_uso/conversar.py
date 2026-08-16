@@ -25,6 +25,14 @@ MAX_VUELTAS = 4
 
 TEXTO_DE_RESPALDO = "Perdón, se me enredó eso. ¿Me lo repites?"
 
+# Herramientas cuyo resultado no le dice nada nuevo al modelo: confirman que se
+# guardó un dato que él mismo acaba de mandar. Si ya escribió texto en el mismo
+# turno, ese texto sirve y el segundo viaje al modelo es tiempo regalado.
+#
+# `generar_plan` y `registrar_sesion` NO entran acá: sus resultados traen
+# números y motivos que el modelo no puede haber sabido antes de llamarlas.
+SIN_NADA_NUEVO_QUE_CONTAR = frozenset({"actualizar_perfil"})
+
 SENSACIONES_VALIDAS: tuple[Sensacion, ...] = (
     "facil",
     "normal",
@@ -102,6 +110,16 @@ def procesar_turno(
 
         historial.append(_mensaje_de_resultados(resultados))
 
+        if _ya_dijo_todo(respuesta.texto, resultados):
+            return ResultadoTurno(
+                texto=respuesta.texto,
+                perfil=perfil,
+                mensajes=historial,
+                vueltas=vuelta,
+                herramientas_usadas=tuple(usadas),
+                plan=plan,
+            )
+
     # Nunca se devuelve texto vacío: desde el teléfono, silencio y error se ven
     # igual, y el usuario acaba repitiendo sin saber si lo escucharon.
     return ResultadoTurno(
@@ -144,6 +162,24 @@ def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:
         "km_primera_semana": nuevo.semanas[0].km_total,
         "km_pico": max(semana.km_total for semana in de_carga),
     }
+
+
+def _ya_dijo_todo(
+    texto: str, resultados: list[tuple[LlamadaHerramienta, dict[str, Any]]]
+) -> bool:
+    """¿El texto que ya escribió el modelo sirve como respuesta final?
+
+    Sirve cuando escribió algo Y todas las herramientas de la vuelta fueron de
+    las que no aportan información nueva Y ninguna falló. Un error sí hay que
+    devolvérselo: tiene que enterarse y corregir.
+    """
+    if not texto.strip():
+        return False
+
+    return all(
+        llamada.nombre in SIN_NADA_NUEVO_QUE_CONTAR and "error" not in resultado
+        for llamada, resultado in resultados
+    )
 
 
 def _registrar_y_ajustar(

@@ -40,9 +40,11 @@ def solo_texto(texto: str) -> RespuestaLLM:
     return RespuestaLLM(texto=texto, llamadas=(), mensaje={"role": "assistant"})
 
 
-def con_llamada(nombre: str, entrada: dict[str, Any]) -> RespuestaLLM:
+def con_llamada(
+    nombre: str, entrada: dict[str, Any], texto: str = ""
+) -> RespuestaLLM:
     return RespuestaLLM(
-        texto="",
+        texto=texto,
         llamadas=(LlamadaHerramienta(id="tu_1", nombre=nombre, entrada=entrada),),
         mensaje={"role": "assistant"},
     )
@@ -275,6 +277,72 @@ def test_una_sensacion_desconocida_no_se_degrada_a_normal() -> None:
     assert "con_dolor" in devuelto["validas"]
     assert resultado.plan is not None
     assert resultado.plan.version == 1
+
+
+def test_si_ya_dijo_lo_que_sigue_no_gasta_otra_llamada_al_modelo() -> None:
+    # Una sola respuesta preparada: si el bucle pidiera una segunda, reventaría.
+    llm = LLMFalso(
+        con_llamada(
+            "actualizar_perfil",
+            {"objetivo": "21k"},
+            texto="Anotado. ¿Cuántos km corres por semana?",
+        )
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("quiero un 21k")], Perfil(), hoy=HOY
+    )
+
+    assert resultado.vueltas == 1
+    assert "Cuántos km" in resultado.texto
+    assert resultado.perfil.objetivo == "21k"
+
+
+def test_generar_plan_si_necesita_el_segundo_viaje() -> None:
+    # El resultado trae semanas y kilómetros que el modelo no pudo haber sabido.
+    llm = LLMFalso(
+        con_llamada("generar_plan", {}, texto="Va, te lo armo."),
+        solo_texto("Listo: 11 semanas, arrancas con 25 km."),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("hazme el plan")], PERFIL_COMPLETO, hoy=HOY
+    )
+
+    assert resultado.vueltas == 2
+    assert "11 semanas" in resultado.texto
+
+
+def test_un_error_de_herramienta_siempre_vuelve_al_modelo() -> None:
+    # Aunque haya escrito texto: tiene que enterarse del error y corregir.
+    llm = LLMFalso(
+        con_llamada(
+            "actualizar_perfil",
+            {"fecha_carrera": "cuando sea"},
+            texto="Anotado.",
+        ),
+        solo_texto("¿Qué día exactamente?"),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], Perfil(), hoy=HOY
+    )
+
+    assert resultado.vueltas == 2
+    assert "Qué día" in resultado.texto
+
+
+def test_sin_texto_acompanante_se_pide_la_respuesta_al_modelo() -> None:
+    llm = LLMFalso(
+        con_llamada("actualizar_perfil", {"objetivo": "21k"}),
+        solo_texto("Anotado, ¿y tu nivel?"),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], Perfil(), hoy=HOY
+    )
+
+    assert resultado.vueltas == 2
 
 
 def test_el_bucle_no_gira_para_siempre() -> None:

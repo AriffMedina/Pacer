@@ -44,6 +44,15 @@ def _es_recuperable(error: BaseException) -> bool:
 class AdaptadorGroqWhisper:
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
+        # Cliente persistente: sin esto cada turno abre una conexión TLS nueva
+        # contra api.groq.com y paga el handshake completo.
+        self._cliente = httpx.Client(
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=TIEMPO_LIMITE_S,
+        )
+
+    def cerrar(self) -> None:
+        self._cliente.close()
 
     @retry(
         stop=stop_after_attempt(INTENTOS),
@@ -53,16 +62,14 @@ class AdaptadorGroqWhisper:
     )
     def transcribir(self, audio: bytes, nombre_archivo: str) -> Transcripcion:
         try:
-            respuesta = httpx.post(
+            respuesta = self._cliente.post(
                 URL,
-                headers={"Authorization": f"Bearer {self._api_key}"},
                 files={"file": (nombre_archivo, audio)},
                 data={
                     "model": MODELO,
                     "language": IDIOMA,
                     "response_format": "verbose_json",
                 },
-                timeout=TIEMPO_LIMITE_S,
             )
         except httpx.RequestError as fallo:
             raise ErrorDeTranscripcion(

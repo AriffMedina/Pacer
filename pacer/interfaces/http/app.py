@@ -144,7 +144,11 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
         return JSONResponse({"error": "audio_vacio"}, status_code=400)
 
     try:
-        transcripcion = app.state.stt.transcribir(datos, audio.filename or "turno.webm")
+        # En un hilo: httpx aquí es bloqueante y colgaría el event loop, que es
+        # justo lo que rompe cuando entren Telegram y la web a la vez.
+        transcripcion = await asyncio.to_thread(
+            app.state.stt.transcribir, datos, audio.filename or "turno.webm"
+        )
     except ErrorDeTranscripcion as fallo:
         return JSONResponse(
             {
