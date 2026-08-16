@@ -21,6 +21,14 @@ def test_ordena_guardar_antes_de_preguntar() -> None:
     assert "Guardar primero, preguntar después" in prompt
 
 
+def test_le_prohibe_afirmar_lo_que_no_hizo() -> None:
+    """Medido en vivo: recibió un error de herramienta y dijo "ya lo registré"."""
+    prompt = construir_prompt()
+
+    assert "REGLA DE HONESTIDAD" in prompt
+    assert "NO PASÓ NADA" in prompt
+
+
 def test_le_prohibe_echarle_la_culpa_al_sistema() -> None:
     prompt = construir_prompt()
 

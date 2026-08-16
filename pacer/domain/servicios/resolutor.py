@@ -76,6 +76,14 @@ def _interpretar_fecha(pista: str, hoy: date) -> date | None:
 
 
 def _cercanas(sesiones: tuple[Sesion, ...], hoy: date) -> tuple[Sesion, ...]:
-    """Sesiones dentro de la ventana reciente, como opciones para preguntar."""
+    """Sesiones sobre las que tiene sentido preguntar "¿cómo te fue?".
+
+    Solo las que YA PASARON y siguen sin reportar. La de hoy no entra: todavía
+    no ocurrió, e incluirla convertía en ambiguo un caso que no lo era —"el
+    fácil de 5.6 km" con una sesión pasada y una de hoy devolvía dos candidatas
+    y el registro se caía.
+    """
     desde = hoy - timedelta(days=DIAS_DE_VENTANA)
-    return tuple(s for s in sesiones if desde <= s.fecha <= hoy)
+    return tuple(
+        s for s in sesiones if desde <= s.fecha < hoy and not s.completada
+    )
