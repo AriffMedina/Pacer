@@ -43,6 +43,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://pacer:pacer@postgres:5432/pacer
     ports:
       - "8000:8000"
+    volumes:
+      # Credenciales de AWS de solo lectura, NO copiadas al .env ni a la imagen.
+      # En EC2 esto no va: el rol de instancia las provee y el archivo no existe.
+      # Es el mismo argumento del ADR-008 — sin llaves de API en ningún lado.
+      - ${USERPROFILE:-${HOME}}/.aws:/home/pacer/.aws:ro
 
   n8n:
     image: n8nio/n8n:latest
