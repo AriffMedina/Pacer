@@ -1,28 +1,49 @@
 """Property-based tests del generador.
 
-Los rangos de los perfiles salen de `paramethers.md` §2.1 y §2.3.
+Los rangos NO se copian aquí: se derivan de las constantes de dominio, así el
+espacio explorado no puede quedarse viejo cuando `paramethers.md` cambie. La
+v1.0 de este archivo tenía los máximos desactualizados y probaba un espacio
+equivocado sin avisar.
 """
 
 from datetime import date
+from itertools import pairwise
 
 from hypothesis import given
 from hypothesis import strategies as st
 
+from pacer.domain.reglas.duracion import (
+    KM_ARRANQUE_MIN,
+    PICO_MAX_KM,
+    SEMANAS,
+    SEMANAS_MIN_POR_NIVEL,
+)
 from pacer.domain.servicios.generador_plan import generar_plan
 
-SEMANAS = {"5k": (6, 12), "10k": (8, 14), "21k": (10, 18), "maraton": (12, 20)}
-KM_ARRANQUE_MIN = {"5k": 12, "10k": 18, "21k": 25, "maraton": 32}
 INICIO = date(2026, 8, 17)
+
+# Todas las combinaciones que la compuerta dura admite. `maraton` + `nuevo`
+# queda fuera por construcción: su mínimo es None, o sea rechazo incondicional.
+COMBINACIONES = sorted(
+    (distancia, nivel)
+    for distancia, por_nivel in SEMANAS_MIN_POR_NIVEL.items()
+    for nivel, minimo in por_nivel.items()
+    if minimo is not None
+)
 
 
 @st.composite
 def perfiles_validos(draw: st.DrawFn) -> dict[str, object]:
-    distancia = draw(st.sampled_from(sorted(SEMANAS)))
-    minimo, maximo = SEMANAS[distancia]
+    distancia, nivel = draw(st.sampled_from(COMBINACIONES))
+    minimo = SEMANAS_MIN_POR_NIVEL[distancia][nivel]
+    assert minimo is not None
     km_min = KM_ARRANQUE_MIN[distancia]
     return {
         "distancia": distancia,
-        "semanas": draw(st.integers(min_value=minimo, max_value=maximo)),
+        "nivel": nivel,
+        "semanas": draw(
+            st.integers(min_value=minimo, max_value=SEMANAS[distancia]["max"])
+        ),
         "km_semana": draw(st.integers(min_value=km_min, max_value=km_min * 3)),
         "dias": draw(st.sampled_from([3, 4])),
         "inicio": INICIO,
@@ -33,9 +54,27 @@ def perfiles_validos(draw: st.DrawFn) -> dict[str, object]:
 def test_regla_del_diez_por_ciento_es_invariante(perfil: dict[str, object]) -> None:
     plan = generar_plan(**perfil)  # type: ignore[arg-type]
 
-    for previa, actual in zip(plan.semanas, plan.semanas[1:]):
-        if not actual.es_descarga:
-            assert actual.km_total <= previa.km_total * 1.10 + 0.5
+    # Se comparan semanas de carga entre sí: volver de una descarga a la línea
+    # de tendencia es recuperación, no progresión, y no cuenta contra el techo.
+    de_carga = [semana for semana in plan.semanas if not semana.es_descarga]
+
+    for previa, actual in pairwise(de_carga):
+        assert actual.km_total <= previa.km_total * 1.10 + 0.5
+
+
+@given(perfil=perfiles_validos())
+def test_ninguna_semana_supera_el_techo_de_volumen(perfil: dict[str, object]) -> None:
+    plan = generar_plan(**perfil)  # type: ignore[arg-type]
+    # El techo es el pico de la distancia, salvo que el corredor ya entrene por
+    # encima: en ese caso su propio volumen es el techo y no se le baja.
+    # El +0.5 absorbe el redondeo por sesión.
+    techo = (
+        max(PICO_MAX_KM[str(perfil["distancia"])], float(perfil["km_semana"]))  # type: ignore[arg-type]
+        + 0.5
+    )
+
+    for semana in plan.semanas:
+        assert semana.km_total <= techo
 
 
 @given(perfil=perfiles_validos())

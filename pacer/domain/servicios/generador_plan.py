@@ -10,7 +10,13 @@ sobre número de sesiones: es la métrica correcta (§5).
 from datetime import date, timedelta
 
 from pacer.domain.entidades.plan import Plan, Semana, Sesion, TipoSesion
-from pacer.domain.reglas.descarga import CADA_N_SEMANAS, FACTOR_VOLUMEN
+from pacer.domain.reglas.descarga import FACTOR_VOLUMEN
+from pacer.domain.reglas.duracion import (
+    PICO_MAX_KM,
+    descarga_cada,
+    descarga_en_base,
+    validar_duracion,
+)
 from pacer.domain.reglas.periodizacion import repartir_bloques
 from pacer.domain.reglas.progresion import PROGRESION_SEMANAL_MAX
 
@@ -42,6 +48,7 @@ ORDEN_BLOQUES = ("base", "construccion", "pico", "tapering")
 
 def generar_plan(
     distancia: str,
+    nivel: str,
     semanas: int,
     km_semana: int,
     dias: int,
@@ -50,14 +57,17 @@ def generar_plan(
     """Construye un plan completo a partir del perfil del corredor.
 
     `inicio` se inyecta: el dominio no lee el reloj.
+    Lanza `PlanImposible` si la combinación no admite un plan seguro.
     """
     if dias not in COMPOSICION:
         raise ValueError(f"días no soportados: {dias} (se admiten 3 o 4)")
 
+    validar_duracion(distancia, nivel, semanas)
+
     bloques = repartir_bloques(distancia, semanas)
     primer_dia = inicio
 
-    volumenes = _volumenes_por_semana(bloques, km_semana)
+    volumenes = _volumenes_por_semana(bloques, km_semana, nivel, distancia)
     construidas = []
 
     numero = 0
@@ -81,28 +91,44 @@ def generar_plan(
 
 
 def _volumenes_por_semana(
-    bloques: dict[str, int], km_inicial: int
+    bloques: dict[str, int], km_inicial: int, nivel: str, distancia: str
 ) -> list[tuple[float, bool]]:
     """Calcula el volumen de cada semana y marca cuáles son de descarga."""
     volumenes: list[tuple[float, bool]] = []
-    volumen = float(km_inicial)
+    # La tendencia es la línea de progresión. Una descarga es un bajón puntual
+    # POR DEBAJO de la tendencia, no un retroceso de la tendencia misma: si la
+    # progresión continuara desde el valor reducido, cada ciclo cerraría en
+    # 1.10 × 1.10 × 0.65 = 0.79 y el plan iría hacia abajo.
+    tendencia = float(km_inicial)
+    # Techo duro: la carga deja de crecer al llegar al pico de la distancia y
+    # se sostiene. Un entrenador no sube el volumen indefinidamente.
+    #
+    # Si el corredor YA entrena por encima de ese pico, el techo es su volumen
+    # actual: el generador está para no empujarlo más allá de lo típico, no
+    # para bajarle la carga a quien ya la sostiene.
+    techo = max(float(PICO_MAX_KM[distancia]), tendencia)
+    cada = descarga_cada(nivel)
+    en_base = descarga_en_base(nivel)
     indice = 0
 
     for bloque in ("base", "construccion", "pico"):
         for _ in range(bloques[bloque]):
             indice += 1
-            # El bloque base no lleva descargas (`paramethers.md` §6).
-            es_descarga = bloque != "base" and indice % CADA_N_SEMANAS == 0
-            if indice == 1:
-                pass
-            elif es_descarga:
-                volumen *= FACTOR_VOLUMEN
+            # La exención del bloque base depende del nivel (§6 v1.1): quien ya
+            # corre con consistencia usa el base como descarga implícita.
+            permitida = en_base or bloque != "base"
+            es_descarga = permitida and indice % cada == 0
+
+            if es_descarga:
+                volumen = tendencia * FACTOR_VOLUMEN
             else:
-                volumen *= PROGRESION_SEMANAL_MAX
+                if indice > 1:
+                    tendencia = min(tendencia * PROGRESION_SEMANAL_MAX, techo)
+                volumen = tendencia
             volumenes.append((round(volumen, 1), es_descarga))
 
     # El tapering baja de forma progresiva hasta el 50% del pico (§4).
-    pico = volumen
+    pico = tendencia
     total_taper = bloques["tapering"]
     for k in range(1, total_taper + 1):
         factor = 1 - TAPER_REDUCCION_VOLUMEN * k / total_taper

@@ -27,7 +27,14 @@ async def sesion_bd() -> AsyncIterator[AsyncSession]:
 
 
 def plan_nuevo():
-    return generar_plan("21k", 12, 25, 4, inicio=date(2026, 8, 17))
+    return generar_plan(
+        distancia="21k",
+        nivel="intermedio",
+        semanas=12,
+        km_semana=25,
+        dias=4,
+        inicio=date(2026, 8, 17),
+    )
 
 
 async def test_guarda_y_recupera_un_plan(sesion_bd: AsyncSession) -> None:

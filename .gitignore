@@ -12,3 +12,7 @@ __pycache__/
 # Environments
 .venv/
 .env
+
+# Base local de desarrollo (SQLite). En despliegue se usa Postgres.
+*.db
+*.db-journal
