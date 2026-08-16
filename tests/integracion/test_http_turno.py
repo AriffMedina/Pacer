@@ -91,6 +91,36 @@ def test_la_voz_se_pide_aparte_con_el_id_del_turno(cliente: TestClient) -> None:
     assert voz.content == b"mp3-de-mentira"
 
 
+def test_la_voz_se_adelanta_y_no_se_sintetiza_dos_veces(cliente: TestClient) -> None:
+    class TTSContador:
+        def __init__(self) -> None:
+            self.veces = 0
+
+        def sintetizar(self, texto: str) -> bytes:
+            self.veces += 1
+            return b"mp3"
+
+    contador = TTSContador()
+    cliente.app.state.tts = contador
+
+    turno_id = cliente.post("/api/turno", files=audio_de_prueba()).json()["turno_id"]
+    cliente.get(f"/api/voz/{turno_id}")
+
+    # Una sola vez: la del adelanto. Si el endpoint volviera a sintetizar,
+    # el usuario pagaría la latencia dos veces.
+    assert contador.veces == 1
+
+
+def test_un_fallo_de_voz_no_rompe_el_turno(cliente: TestClient) -> None:
+    class TTSQueExplota:
+        def sintetizar(self, texto: str) -> bytes:
+            raise RuntimeError("Polly caído")
+
+    cliente.app.state.tts = TTSQueExplota()
+
+    assert cliente.post("/api/turno", files=audio_de_prueba()).status_code == 200
+
+
 def test_un_turno_inexistente_no_devuelve_audio(cliente: TestClient) -> None:
     assert cliente.get("/api/voz/noexiste").status_code == 404
 

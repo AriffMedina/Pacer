@@ -5,6 +5,7 @@ transcripción y la latencia. El cajón de diagnóstico no es adorno: sin él, u
 turno lento y un turno roto se ven igual desde el teléfono.
 """
 
+import asyncio
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, UploadFile
+from fastapi import BackgroundTasks, FastAPI, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -56,6 +57,7 @@ sesion = SesionEnMemoria()
 # Respuestas esperando ser sintetizadas. Se guardan pocas y se descartan las
 # viejas: nadie pide la voz de un turno de hace veinte turnos.
 _PENDIENTES: OrderedDict[str, str] = OrderedDict()
+_YA_SINTETIZADO: OrderedDict[str, bytes] = OrderedDict()
 MAX_PENDIENTES = 20
 
 
@@ -65,6 +67,23 @@ def _guardar_para_voz(texto: str) -> str:
     while len(_PENDIENTES) > MAX_PENDIENTES:
         _PENDIENTES.popitem(last=False)
     return turno_id
+
+
+async def _adelantar_sintesis(turno_id: str, texto: str) -> None:
+    """Sintetiza sin que nadie lo haya pedido todavía.
+
+    Corre después de responder, así los ~200 ms de Polly se solapan con el
+    viaje de red y el render del cliente en vez de sumarse. Si falla, no pasa
+    nada: el endpoint de voz vuelve a intentarlo bajo demanda.
+    """
+    try:
+        audio = await asyncio.to_thread(app.state.tts.sintetizar, texto)
+    except Exception:  # noqa: BLE001 — un fallo de voz jamás rompe un turno
+        return
+
+    _YA_SINTETIZADO[turno_id] = audio
+    while len(_YA_SINTETIZADO) > MAX_PENDIENTES:
+        _YA_SINTETIZADO.popitem(last=False)
 
 
 @asynccontextmanager
@@ -89,7 +108,7 @@ app = FastAPI(title="Pacer", lifespan=ciclo_de_vida)
 
 
 @app.post("/api/turno")
-async def turno(audio: UploadFile) -> JSONResponse:
+async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
     """Un turno hablado completo."""
     arranque = time.perf_counter()
 
@@ -156,6 +175,8 @@ async def turno(audio: UploadFile) -> JSONResponse:
     # audio se pide aparte: así el usuario lee la respuesta segundos antes de
     # oírla, y un turno en modo texto no gasta una llamada a Polly.
     turno_id = _guardar_para_voz(resultado.texto)
+    if resultado.texto:
+        tareas.add_task(_adelantar_sintesis, turno_id, resultado.texto)
 
     return JSONResponse(
         {
@@ -176,12 +197,17 @@ async def turno(audio: UploadFile) -> JSONResponse:
 
 @app.get("/api/voz/{turno_id}")
 async def voz(turno_id: str) -> Response:
-    """Sintetiza la respuesta de un turno. Se pide después de mostrar el texto."""
+    """Devuelve la voz del turno. Suele estar lista antes de que la pidan."""
+    adelantada = _YA_SINTETIZADO.get(turno_id)
+    if adelantada is not None:
+        return Response(adelantada, media_type="audio/mpeg")
+
     texto = _PENDIENTES.get(turno_id)
     if not texto:
         return Response(status_code=404)
 
-    return Response(app.state.tts.sintetizar(texto), media_type="audio/mpeg")
+    audio = await asyncio.to_thread(app.state.tts.sintetizar, texto)
+    return Response(audio, media_type="audio/mpeg")
 
 
 @app.get("/api/salud")

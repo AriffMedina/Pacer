@@ -25,6 +25,21 @@
     let grabadora = null;
     let trozos = [];
 
+    // Un solo elemento de audio, desbloqueado durante el gesto del usuario.
+    // En móvil, un play() que no nace de un toque queda a merced de la política
+    // de autoplay y puede tardar segundos o no sonar nunca.
+    const reproductor = new Audio();
+    let desbloqueado = false;
+
+    function desbloquearAudio() {
+      if (desbloqueado) return;
+      desbloqueado = true;
+      reproductor.muted = true;
+      reproductor.play().catch(() => {});
+      reproductor.pause();
+      reproductor.muted = false;
+    }
+
     function anotar(linea) {
       diagnostico.textContent += linea + "\n";
     }
@@ -39,6 +54,7 @@
 
     async function empezar() {
       if (grabadora) return;
+      desbloquearAudio();
 
       // navigator.mediaDevices solo existe en contexto seguro: HTTPS o localhost.
       // Aplica a todos los navegadores, no solo a Safari.
@@ -128,12 +144,20 @@
 
     async function reproducir(turnoId) {
       const arranque = performance.now();
-      const audio = new Audio("/api/voz/" + turnoId);
-      audio.addEventListener("playing", () => {
-        anotar(`voz sonando ${Math.round(performance.now() - arranque)} ms después`);
-      });
       try {
-        await audio.play();
+        // fetch en vez de dejarle la descarga al <audio>: los móviles frenan la
+        // precarga de medios para ahorrar datos, y eso son segundos de espera.
+        const respuesta = await fetch("/api/voz/" + turnoId);
+        if (!respuesta.ok) {
+          anotar("sin audio para este turno");
+          return;
+        }
+        const blob = await respuesta.blob();
+        const descarga = Math.round(performance.now() - arranque);
+
+        reproductor.src = URL.createObjectURL(blob);
+        await reproductor.play();
+        anotar(`voz: descarga ${descarga} ms · suena a los ${Math.round(performance.now() - arranque)} ms`);
       } catch (error) {
         anotar("no se pudo reproducir: " + error.message);
       }
