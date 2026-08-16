@@ -4,6 +4,7 @@ from datetime import date
 from typing import Any
 
 from pacer.application.casos_uso.conversar import procesar_turno
+from pacer.application.casos_uso.crear_plan import crear_plan
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import LlamadaHerramienta, RespuestaLLM
 
@@ -159,6 +160,121 @@ def test_una_meta_inalcanzable_vuelve_como_alternativas() -> None:
     assert devuelto["error"] == "meta_inalcanzable"
     assert devuelto["semanas_minimas"] == 20
     assert devuelto["alternativas"]
+
+
+def test_registrar_una_sesion_dura_produce_la_version_dos() -> None:
+    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY)
+    llm = LLMFalso(
+        con_llamada(
+            "registrar_sesion",
+            {"pista_temporal": "hoy", "km": 5.0, "sensacion": "muy_dura"},
+        ),
+        solo_texto("Te bajé la carga de la semana."),
+    )
+
+    resultado = procesar_turno(
+        llm,
+        "sistema",
+        [mensaje_usuario("hoy corrí y acabé muerto")],
+        PERFIL_COMPLETO,
+        hoy=HOY,
+        plan=plan,
+    )
+
+    assert resultado.plan is not None
+    assert resultado.plan.version == 2
+    assert resultado.plan.motivo_cambio is not None
+
+
+def test_al_modelo_se_le_da_el_motivo_para_que_lo_explique() -> None:
+    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY)
+    llm = LLMFalso(
+        con_llamada(
+            "registrar_sesion",
+            {"pista_temporal": "hoy", "km": 5.0, "sensacion": "con_dolor"},
+        ),
+        solo_texto("..."),
+    )
+
+    procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], PERFIL_COMPLETO, hoy=HOY, plan=plan
+    )
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["plan_ajustado"] is True
+    assert "con_dolor" in devuelto["motivo_cambio"]
+
+
+def test_una_sesion_normal_no_cambia_la_version() -> None:
+    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY)
+    llm = LLMFalso(
+        con_llamada(
+            "registrar_sesion",
+            {"pista_temporal": "hoy", "km": 6.0, "sensacion": "normal"},
+        ),
+        solo_texto("Anotado."),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], PERFIL_COMPLETO, hoy=HOY, plan=plan
+    )
+
+    assert resultado.plan is not None
+    assert resultado.plan.version == 1
+
+
+def test_sin_plan_todavia_no_se_puede_registrar() -> None:
+    llm = LLMFalso(
+        con_llamada("registrar_sesion", {"pista_temporal": "ayer", "km": 5.0}),
+        solo_texto("Todavía no tienes plan."),
+    )
+
+    procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], PERFIL_COMPLETO, hoy=HOY, plan=None
+    )
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["error"] == "sin_plan"
+
+
+def test_una_pista_ambigua_devuelve_opciones_no_un_error() -> None:
+    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY)
+    llm = LLMFalso(
+        con_llamada(
+            "registrar_sesion",
+            {"pista_temporal": "el otro día", "km": 5.0, "sensacion": "normal"},
+        ),
+        solo_texto("¿Cuál de estas?"),
+    )
+
+    procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], PERFIL_COMPLETO, hoy=HOY, plan=plan
+    )
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["error"] == "sesion_ambigua"
+    assert devuelto["candidatas"]
+
+
+def test_una_sensacion_desconocida_no_se_degrada_a_normal() -> None:
+    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY)
+    llm = LLMFalso(
+        con_llamada(
+            "registrar_sesion",
+            {"pista_temporal": "hoy", "km": 5.0, "sensacion": "adolorido"},
+        ),
+        solo_texto("¿Cómo te sentiste exactamente?"),
+    )
+
+    resultado = procesar_turno(
+        llm, "sistema", [mensaje_usuario("...")], PERFIL_COMPLETO, hoy=HOY, plan=plan
+    )
+
+    devuelto = llm.recibidos[-1][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert devuelto["error"] == "sensacion_invalida"
+    assert "con_dolor" in devuelto["validas"]
+    assert resultado.plan is not None
+    assert resultado.plan.version == 1
 
 
 def test_el_bucle_no_gira_para_siempre() -> None:

@@ -13,11 +13,22 @@ from pacer.application.casos_uso.crear_plan import crear_plan
 from pacer.application.herramientas.despachador import despachar
 from pacer.application.herramientas.esquemas import catalogo_para_bedrock
 from pacer.domain.entidades.perfil import Perfil
-from pacer.domain.entidades.plan import Plan
+from pacer.domain.entidades.plan import Plan, Sensacion
 from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
 from pacer.domain.reglas.duracion import PlanImposible
+from pacer.domain.servicios.ajustador import ajustar
+from pacer.domain.servicios.registro import registrar
+from pacer.domain.servicios.resolutor import resolver_sesion
 
 MAX_VUELTAS = 4
+
+SENSACIONES_VALIDAS: tuple[Sensacion, ...] = (
+    "facil",
+    "normal",
+    "pesada",
+    "muy_dura",
+    "con_dolor",
+)
 
 CAMPOS_DE_PERFIL = (
     "objetivo",
@@ -79,6 +90,8 @@ def procesar_turno(
                     perfil = _aplicar_actualizacion(perfil, llamada.entrada)
                 elif llamada.nombre == "generar_plan":
                     plan, resultado = _generar(perfil, hoy)
+                elif llamada.nombre == "registrar_sesion":
+                    plan, resultado = _registrar_y_ajustar(plan, llamada.entrada, hoy)
 
             resultados.append((llamada, resultado))
 
@@ -118,6 +131,70 @@ def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:
         "km_primera_semana": nuevo.semanas[0].km_total,
         "km_pico": max(semana.km_total for semana in de_carga),
     }
+
+
+def _registrar_y_ajustar(
+    plan: Plan | None, entrada: dict[str, Any], hoy: date
+) -> tuple[Plan | None, dict[str, Any]]:
+    """Resuelve a qué sesión se refiere, la registra, y ajusta si hace falta.
+
+    Este es el cuarto paso del ciclo: reportas cómo te fue y el plan reacciona.
+    """
+    if plan is None:
+        return None, {"error": "sin_plan", "explicacion": "todavía no hay plan"}
+
+    resolucion = resolver_sesion(plan, str(entrada.get("pista_temporal", "")), hoy)
+
+    if resolucion.sesion is None:
+        if resolucion.candidatas:
+            return plan, {
+                "error": "sesion_ambigua",
+                "candidatas": [
+                    {"fecha": s.fecha.isoformat(), "tipo": s.tipo, "km": s.km}
+                    for s in resolucion.candidatas
+                ],
+            }
+        return plan, {"error": "sesion_no_encontrada"}
+
+    objetivo = resolucion.sesion
+    cruda = entrada.get("sensacion")
+    sensacion = _sensacion(cruda)
+
+    # Una sensación que no reconocemos NO se degrada a "normal": eso perdería
+    # en silencio un reporte de dolor. Se devuelve el catálogo y el coach pregunta.
+    if sensacion is None:
+        return plan, {
+            "error": "sensacion_invalida",
+            "recibido": cruda,
+            "validas": list(SENSACIONES_VALIDAS),
+        }
+
+    km = float(entrada.get("km") or objetivo.km)
+
+    registrado = registrar(plan, objetivo, km=km, sensacion=sensacion)
+    reporte = replace(objetivo, km=km, completada=True, sensacion=sensacion)
+    ajustado = ajustar(registrado, reporte)
+
+    cambio = ajustado.version > registrado.version
+    return ajustado, {
+        "ok": True,
+        "fecha": objetivo.fecha.isoformat(),
+        "km": km,
+        "sensacion": sensacion,
+        "plan_ajustado": cambio,
+        "motivo_cambio": ajustado.motivo_cambio,
+        "version": ajustado.version,
+    }
+
+
+def _sensacion(valor: Any) -> Sensacion | None:
+    """Valida contra el catálogo. Ausencia significa 'no comentó', y eso sí es normal."""
+    if valor is None:
+        return "normal"
+    for opcion in SENSACIONES_VALIDAS:
+        if valor == opcion:
+            return opcion
+    return None
 
 
 def _mensaje_de_resultados(
