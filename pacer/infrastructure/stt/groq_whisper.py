@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from pacer.domain.puertos.voz import Transcripcion
+from pacer.domain.puertos.voz import ErrorDeTranscripcion, Transcripcion
 
 URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 MODELO = "whisper-large-v3-turbo"
@@ -25,19 +25,49 @@ class AdaptadorGroqWhisper:
         self._api_key = api_key
 
     def transcribir(self, audio: bytes, nombre_archivo: str) -> Transcripcion:
-        respuesta = httpx.post(
-            URL,
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            files={"file": (nombre_archivo, audio)},
-            data={
-                "model": MODELO,
-                "language": IDIOMA,
-                "response_format": "verbose_json",
-            },
-            timeout=TIEMPO_LIMITE_S,
-        )
-        respuesta.raise_for_status()
+        try:
+            respuesta = httpx.post(
+                URL,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                files={"file": (nombre_archivo, audio)},
+                data={
+                    "model": MODELO,
+                    "language": IDIOMA,
+                    "response_format": "verbose_json",
+                },
+                timeout=TIEMPO_LIMITE_S,
+            )
+        except httpx.RequestError as fallo:
+            raise ErrorDeTranscripcion(
+                f"no se pudo contactar a Groq: {fallo}", recuperable=True
+            ) from fallo
+
+        if respuesta.status_code != httpx.codes.OK:
+            raise ErrorDeTranscripcion(
+                describir_fallo(respuesta.status_code, respuesta.text),
+                recuperable=respuesta.status_code >= 500,
+            )
+
         return interpretar_transcripcion(respuesta.json())
+
+
+def describir_fallo(codigo: int, cuerpo: str) -> str:
+    """Traduce el error del proveedor a algo accionable.
+
+    Groq devuelve 401 "Invalid API Key" en el endpoint de audio incluso con
+    llaves que /models acepta, cuando la cuenta no tiene habilitado o agotó el
+    acceso a audio. El mensaje literal manda a revisar la llave y hace perder
+    el tiempo en el lugar equivocado.
+    """
+    if codigo in (401, 403):
+        return (
+            "Groq rechazó la llave en el endpoint de audio. Si la misma llave "
+            "funciona en /models, revisa límites y facturación de audio en la "
+            "consola de Groq, no la llave."
+        )
+    if codigo == 429:
+        return "Groq está limitando por cuota. Espera o sube el plan."
+    return f"Groq respondió {codigo}: {cuerpo[:200]}"
 
 
 def interpretar_transcripcion(cuerpo: dict[str, Any]) -> Transcripcion:

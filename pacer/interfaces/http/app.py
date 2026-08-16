@@ -30,6 +30,7 @@ from pacer.composition_root import (
     construir_tts,
 )
 from pacer.domain.entidades.perfil import Perfil
+from pacer.domain.puertos.voz import ErrorDeTranscripcion
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 
@@ -88,7 +89,18 @@ async def turno(audio: UploadFile) -> JSONResponse:
     if not datos:
         return JSONResponse({"error": "audio_vacio"}, status_code=400)
 
-    transcripcion = app.state.stt.transcribir(datos, audio.filename or "turno.webm")
+    try:
+        transcripcion = app.state.stt.transcribir(datos, audio.filename or "turno.webm")
+    except ErrorDeTranscripcion as fallo:
+        return JSONResponse(
+            {
+                "error": "fallo_transcripcion",
+                "detalle": fallo.motivo,
+                "recuperable": fallo.recuperable,
+            },
+            status_code=502,
+        )
+
     if not transcripcion.texto:
         return JSONResponse({"error": "no_se_entendio"}, status_code=422)
 
