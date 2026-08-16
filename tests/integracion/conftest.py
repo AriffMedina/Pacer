@@ -3,12 +3,17 @@
 Por defecto corre contra SQLite en memoria. Para verificar Postgres —que es lo
 que se despliega— basta apuntar la variable, sin tocar una línea de test:
 
-    docker compose -f infra/docker-compose.yml up -d
-    TEST_DATABASE_URL=postgresql+asyncpg://pacer:pacer@localhost:5432/pacer \\
+    TEST_DATABASE_URL=postgresql+asyncpg://postgres@localhost:5432/pacer_test \\
         uv run pytest tests/integracion
 
+CUIDADO: estas fixtures hacen `drop_all`. Apuntá SIEMPRE a una base descartable
+(`pacer_test`), nunca a la base de la aplicación ni a otra del mismo servidor.
+
 `drop_all` antes de `create_all` no es opcional: SQLite en memoria nace limpio
-en cada motor, pero Postgres conserva el estado entre tests.
+en cada motor, pero Postgres conserva el estado entre corridas.
+
+Con el compose en vez de un Postgres nativo, el puerto del host es el 5433
+(ver `infra/docker-compose.yml`).
 """
 
 import os
