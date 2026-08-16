@@ -976,12 +976,22 @@ btn.addEventListener('mouseup', parar);
 btn.addEventListener('mouseleave', () => { if (grabadora) parar(); });
 btn.addEventListener('touchstart', (e) => { e.preventDefault(); empezar(); });
 btn.addEventListener('touchend', (e) => { e.preventDefault(); parar(); });
+// Cualquier cosa donde se pueda escribir, no solo <input>: las notas de una
+// carrera son un <textarea> y ahí la barra espaciadora es una palabra, no un
+// botón de hablar.
+const esEditable = (nodo) => !!nodo && (
+  nodo.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(nodo.tagName)
+);
+
 addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'INPUT'){
-    e.preventDefault(); empezar();
-  }
+  if (e.code !== 'Space' || e.repeat) return;
+  // Solo frente al coach. En Plan o Agenda no hay nada que dictar, y la
+  // respuesta del turno repinta la vista encima de lo que estabas haciendo.
+  if (vista !== 'coach' || esEditable(document.activeElement)) return;
+  e.preventDefault();
+  empezar();
 });
-addEventListener('keyup', (e) => { if (e.code === 'Space') parar(); });
+addEventListener('keyup', (e) => { if (e.code === 'Space' && grabadora) parar(); });
 
 /* ============================================================
    Datos y pintado
@@ -1223,7 +1233,43 @@ const MESES_LARGOS = ['enero','febrero','marzo','abril','mayo','junio','julio',
   'agosto','septiembre','octubre','noviembre','diciembre'];
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
+/* La agenda se repinta por muchas razones —un turno del coach, un mensaje de
+   Telegram, quitar otra carrera— y todas reconstruyen el HTML. Si el
+   formulario está abierto a medio llenar, eso borra lo que la persona escribió.
+   Se guarda antes y se devuelve después. */
+function borradorAbierto(){
+  const forma = $('#forma-carrera');
+  if (!forma?.classList.contains('abierta')) return null;
+
+  const activo = document.activeElement;
+  return {
+    fecha: diaElegido,
+    nombre: $('#c-nombre').value,
+    distancia: $('#c-distancia').value,
+    nota: $('#c-nota').value,
+    // Reconstruir el HTML reemplaza los nodos y el foco se va al body. Sin
+    // esto habría que volver a hacer clic a media frase.
+    enfocado: forma.contains(activo) ? activo.id : null,
+    cursor: forma.contains(activo) ? activo.selectionStart : 0,
+  };
+}
+
+function devolverBorrador(borrador){
+  if (!borrador) return;
+  abrirForma(borrador.fecha);
+  $('#c-nombre').value = borrador.nombre;
+  $('#c-distancia').value = borrador.distancia;
+  $('#c-nota').value = borrador.nota;
+
+  const campo = borrador.enfocado && $('#' + borrador.enfocado);
+  if (campo){
+    campo.focus();
+    campo.setSelectionRange(borrador.cursor, borrador.cursor);
+  }
+}
+
 function pintarAgenda(){
+  const borrador = borradorAbierto();
   const hoy = fechaLocal(datos.hoy);
   mesVisible = mesVisible || new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
@@ -1274,11 +1320,11 @@ function pintarAgenda(){
   $('#mes-antes').onclick = () => { mover(-1); };
   $('#mes-despues').onclick = () => { mover(1); };
   $('#mes-hoy').onclick = () => { mesVisible = new Date(hoy.getFullYear(), hoy.getMonth(), 1); pintarAgenda(); };
-  $('#btn-nueva').onclick = () => abrirForma(datos.hoy);
+  $('#btn-nueva').onclick = () => abrirForma(datos.hoy, true);
   $('#c-guardar').onclick = guardarCarrera;
 
   document.querySelectorAll('#v-agenda .dia[data-fecha]').forEach((d) => {
-    d.onclick = () => abrirForma(d.dataset.fecha);
+    d.onclick = () => abrirForma(d.dataset.fecha, true);
   });
   document.querySelectorAll('#v-agenda .quitar').forEach((b) => {
     b.onclick = () => quitarCarrera(Number(b.dataset.id));
@@ -1286,6 +1332,8 @@ function pintarAgenda(){
   document.querySelectorAll('#v-agenda [data-cerrar]').forEach((b) => {
     b.onclick = () => $('#' + b.dataset.cerrar).classList.remove('abierta');
   });
+
+  devolverBorrador(borrador);
 }
 
 function mover(meses){
@@ -1355,12 +1403,14 @@ function textoFecha(f){
   return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES_LARGOS[d.getMonth()]} de ${d.getFullYear()}`;
 }
 
-function abrirForma(fecha){
+function abrirForma(fecha, enfocar = false){
   diaElegido = fecha;
   $('#forma-titulo').textContent = 'Carrera del ' + textoFecha(fecha);
   $('#c-aviso').classList.remove('on');
   $('#forma-carrera').classList.add('abierta');
-  $('#c-nombre').focus();
+  // Al restaurar un borrador NO se roba el foco: la persona puede estar
+  // escribiendo en las notas y saltarle el cursor al nombre es peor que el bug.
+  if (enfocar) $('#c-nombre').focus();
 }
 
 async function guardarCarrera(){
@@ -1386,6 +1436,9 @@ async function guardarCarrera(){
       return;
     }
     anotar('carrera apuntada: ' + nombre + ' ' + diaElegido);
+    // Se cierra ANTES de recargar: si no, el repintado creería que hay un
+    // borrador a medio llenar y devolvería lo que se acaba de guardar.
+    $('#forma-carrera').classList.remove('abierta');
     await cargar();
   }catch(err){ anotar('no se pudo apuntar la carrera: ' + err.message); }
 }
