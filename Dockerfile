@@ -4,8 +4,11 @@
 
 FROM python:3.13-slim AS base
 
-# uv desde su imagen oficial: no hace falta pip ni compilar nada.
-COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /uvx /bin/
+# uv desde PyPI y no desde ghcr.io. Copiarlo de la imagen oficial es más
+# elegante, pero ata la construcción a un segundo registro: un parpadeo de red
+# contra ghcr rompió este build una vez con `TLS handshake timeout`. En una
+# máquina limpia, que es el criterio, conviene depender de un solo registro.
+RUN pip install --no-cache-dir uv==0.12.5
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
