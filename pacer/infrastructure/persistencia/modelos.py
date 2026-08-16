@@ -6,7 +6,7 @@ y `import-linter` es quien vigila que esa frontera no se cruce.
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey
+from sqlalchemy import BigInteger, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Instantes CON zona horaria. Sin esto Postgres crea `timestamp without time
@@ -42,12 +42,31 @@ class CorredorORM(Base):
     password_hash: Mapped[str | None] = mapped_column(default=None)
 
     # Perfil. Son hechos del corredor, no conversación, así que son columnas.
+    nombre: Mapped[str | None] = mapped_column(default=None)
     objetivo: Mapped[str | None] = mapped_column(default=None)
     nivel: Mapped[str | None] = mapped_column(default=None)
     dias_disponibles: Mapped[int | None] = mapped_column(default=None)
     km_semana: Mapped[int | None] = mapped_column(default=None)
     fecha_carrera: Mapped[date | None] = mapped_column(default=None)
     dolor_actual: Mapped[bool] = mapped_column(default=False)
+
+
+class CarreraORM(Base):
+    """Fechas que el corredor apuntó. No son el plan: son su calendario.
+
+    `nombre` + `fecha` es UNIQUE por corredor para que apuntar dos veces la
+    misma carrera —desde la web y luego hablando— no la duplique.
+    """
+
+    __tablename__ = "carrera"
+    __table_args__ = (UniqueConstraint("corredor_id", "fecha", "nombre"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    corredor_id: Mapped[int] = mapped_column(ForeignKey("corredor.id"), index=True)
+    fecha: Mapped[date] = mapped_column(index=True)
+    nombre: Mapped[str]
+    distancia: Mapped[str | None] = mapped_column(default=None)
+    nota: Mapped[str] = mapped_column(default="")
 
 
 class ConversacionORM(Base):
@@ -115,6 +134,10 @@ class SemanaORM(Base):
     plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id"))
     numero: Mapped[int]
     es_descarga: Mapped[bool] = mapped_column(default=False)
+    # base, construccion, pico o tapering. Es cómo el plan se describe a sí
+    # mismo, y sin esta columna el viaje a la base lo borraba.
+    bloque: Mapped[str | None] = mapped_column(default=None)
+    recortada: Mapped[bool | None] = mapped_column(default=False)
 
     plan: Mapped[PlanORM] = relationship(back_populates="semanas")
     sesiones: Mapped[list["SesionORM"]] = relationship(

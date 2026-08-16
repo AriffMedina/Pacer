@@ -13,6 +13,7 @@ from pacer.application.casos_uso.crear_plan import crear_plan
 from pacer.application.contexto.fechas import interpretar_fecha
 from pacer.application.herramientas.despachador import despachar
 from pacer.application.herramientas.esquemas import catalogo_para_bedrock
+from pacer.domain.entidades.carrera import Carrera
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.entidades.plan import Plan, Sensacion
 from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
@@ -31,7 +32,7 @@ TEXTO_DE_RESPALDO = "Perdón, se me enredó eso. ¿Me lo repites?"
 #
 # `generar_plan` y `registrar_sesion` NO entran acá: sus resultados traen
 # números y motivos que el modelo no puede haber sabido antes de llamarlas.
-SIN_NADA_NUEVO_QUE_CONTAR = frozenset({"actualizar_perfil"})
+SIN_NADA_NUEVO_QUE_CONTAR = frozenset({"actualizar_perfil", "apuntar_carrera"})
 
 SENSACIONES_VALIDAS: tuple[Sensacion, ...] = (
     "facil",
@@ -42,6 +43,7 @@ SENSACIONES_VALIDAS: tuple[Sensacion, ...] = (
 )
 
 CAMPOS_DE_PERFIL = (
+    "nombre",
     "objetivo",
     "nivel",
     "dias_disponibles",
@@ -59,6 +61,8 @@ class ResultadoTurno:
     herramientas_usadas: tuple[str, ...]
     plan: Plan | None = None
     corto_por_limite: bool = False
+    carreras_nuevas: tuple[Carrera, ...] = ()
+    """Las que se apuntaron en este turno. Quien llama las persiste."""
 
 
 def procesar_turno(
@@ -74,6 +78,7 @@ def procesar_turno(
     """Corre el ciclo pedir-ejecutar-responder hasta que el modelo cierre el turno."""
     historial = list(mensajes)
     usadas: list[str] = []
+    apuntadas: list[Carrera] = []
     catalogo = catalogo_para_bedrock()
 
     for vuelta in range(1, max_vueltas + 1):
@@ -87,6 +92,7 @@ def procesar_turno(
                 vueltas=vuelta,
                 herramientas_usadas=tuple(usadas),
                 plan=plan,
+                carreras_nuevas=tuple(apuntadas),
             )
 
         historial.append(respuesta.mensaje)
@@ -105,6 +111,10 @@ def procesar_turno(
                     plan, resultado = _generar(perfil, hoy)
                 elif llamada.nombre == "registrar_sesion":
                     plan, resultado = _registrar_y_ajustar(plan, llamada.entrada, hoy)
+                elif llamada.nombre == "apuntar_carrera":
+                    nueva, resultado = _apuntar_carrera(llamada.entrada)
+                    if nueva is not None:
+                        apuntadas.append(nueva)
 
             resultados.append((llamada, resultado))
 
@@ -118,6 +128,7 @@ def procesar_turno(
                 vueltas=vuelta,
                 herramientas_usadas=tuple(usadas),
                 plan=plan,
+                carreras_nuevas=tuple(apuntadas),
             )
 
     # Nunca se devuelve texto vacío: desde el teléfono, silencio y error se ven
@@ -130,7 +141,34 @@ def procesar_turno(
         herramientas_usadas=tuple(usadas),
         plan=plan,
         corto_por_limite=True,
+        carreras_nuevas=tuple(apuntadas),
     )
+
+
+def _apuntar_carrera(entrada: dict[str, Any]) -> tuple[Carrera | None, dict[str, Any]]:
+    """Convierte lo que dijo el modelo en una carrera de la agenda.
+
+    Devuelve un error explícito cuando la fecha no se entiende. Tragarse el
+    fallo y guardar sin fecha haría que el corredor crea que quedó apuntada.
+    """
+    fecha = interpretar_fecha(str(entrada.get("fecha", "")))
+    if fecha is None:
+        return None, {
+            "error": "fecha_no_entendida",
+            "como_seguir": "Pregúntale el día, el mes y el año de la carrera.",
+        }
+
+    nombre = str(entrada.get("nombre", "")).strip()
+    if not nombre:
+        return None, {"error": "falta_el_nombre"}
+
+    carrera = Carrera(
+        fecha=fecha,
+        nombre=nombre,
+        distancia=(entrada.get("distancia") or None),
+        nota=str(entrada.get("nota") or ""),
+    )
+    return carrera, {"ok": True, "fecha": fecha.isoformat(), "nombre": nombre}
 
 
 def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:

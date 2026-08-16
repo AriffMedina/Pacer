@@ -7,6 +7,7 @@ instrucción escrita en el prompt.
 
 from datetime import date
 
+from pacer.domain.entidades.carrera import Carrera, pendientes
 from pacer.domain.entidades.plan import Plan, Semana, Sesion
 
 DIAS = (
@@ -35,31 +36,74 @@ MESES = (
 )
 
 
-def construir_bloque(plan: Plan, hoy: date, fecha_carrera: date) -> str:
-    """Arma el bloque de estado que el coach lee antes de responder."""
-    sesiones = sorted(
-        (sesion for semana in plan.semanas for sesion in semana.sesiones),
-        key=lambda sesion: sesion.fecha,
-    )
-    semana = _semana_de(plan, hoy)
-    numero = semana.numero if semana is not None else len(plan.semanas)
+def construir_bloque(
+    plan: Plan | None = None,
+    *,
+    hoy: date,
+    fecha_carrera: date | None = None,
+    carreras: tuple[Carrera, ...] = (),
+) -> str:
+    """Arma el bloque de estado que el coach lee antes de responder.
 
-    return "\n".join(
-        (
+    Funciona sin plan a propósito: las carreras que el corredor apunta en el
+    calendario existen desde antes de que haya entrenamiento, y el coach tiene
+    que enterarse igual. Si no, agregar algo en la agenda y que el coach no lo
+    sepa se siente como hablar con dos aplicaciones distintas.
+    """
+    lineas = []
+
+    if plan is not None:
+        sesiones = sorted(
+            (sesion for semana in plan.semanas for sesion in semana.sesiones),
+            key=lambda sesion: sesion.fecha,
+        )
+        semana = _semana_de(plan, hoy)
+        numero = semana.numero if semana is not None else len(plan.semanas)
+
+        lineas += [
             _linea_de_encabezado(hoy, numero, len(plan.semanas), fecha_carrera),
             _linea_de_hoy(sesiones, hoy),
             _linea_siguiente(sesiones, hoy),
             _linea_ultima_completada(sesiones),
-        )
-    )
+        ]
+    else:
+        lineas.append(f"HOY: {_fecha_hablada(hoy)} · todavía no hay plan")
+
+    if carreras:
+        lineas.append(_linea_carreras(carreras, hoy))
+
+    return "\n".join(lineas)
+
+
+def _linea_carreras(carreras: tuple[Carrera, ...], hoy: date) -> str:
+    """Las carreras apuntadas, con los días que faltan ya calculados.
+
+    El modelo no resta fechas: se equivoca, y una cuenta regresiva mal dicha
+    destruye la confianza más rápido que cualquier otra cosa.
+    """
+    proximas = pendientes(carreras, hoy)
+    if not proximas:
+        return "CARRERAS APUNTADAS: ninguna próxima"
+
+    partes = [
+        f"{c.nombre} ({c.distancia or 'sin distancia'}) el {_fecha_hablada(c.fecha)}, "
+        f"faltan {(c.fecha - hoy).days} días"
+        for c in proximas
+    ]
+    return "CARRERAS APUNTADAS: " + " · ".join(partes)
+
+
+def _fecha_hablada(fecha: date) -> str:
+    return f"{DIAS[fecha.weekday()]} {fecha.day} de {MESES[fecha.month - 1]}"
 
 
 def _linea_de_encabezado(
-    hoy: date, semana: int, total: int, fecha_carrera: date
+    hoy: date, semana: int, total: int, fecha_carrera: date | None
 ) -> str:
-    fecha = f"{DIAS[hoy.weekday()]} {hoy.day} de {MESES[hoy.month - 1]}"
-    faltan = (fecha_carrera - hoy).days
-    return f"HOY: {fecha} · SEMANA {semana} DE {total} · faltan {faltan} días"
+    cabeza = f"HOY: {_fecha_hablada(hoy)} · SEMANA {semana} DE {total}"
+    if fecha_carrera is None:
+        return cabeza
+    return f"{cabeza} · faltan {(fecha_carrera - hoy).days} días"
 
 
 def _semana_de(plan: Plan, hoy: date) -> Semana | None:

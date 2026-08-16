@@ -3,312 +3,811 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0C100F">
+<meta name="theme-color" content="#080B0A">
 <title>Pacer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* Tokens de UI.md §3. El lima es escaso a propósito: marca lo vivo, no decora. */
+/* ============================================================
+   Tokens. El lima es escaso a propósito: marca lo vivo, no decora.
+   ============================================================ */
 :root{
-  --superficie:#141917; --superficie-alta:#1C2220;
-  --linea:rgba(255,255,255,.08);
-  --texto:#F0F3EC; --texto-2:#99A19A; --texto-3:#5C645E;
-  --lima:#C6F94A; --lima-tenue:rgba(198,249,74,.12); --sobre-lima:#0E1211;
-  --acento-legible:var(--lima);
+  --fondo:#080B0A;
+  --panel:#0E1211;
+  --tarjeta:#121716;
+  --tarjeta-alta:#171D1B;
+  --linea:rgba(255,255,255,.07);
+  --linea-fuerte:rgba(255,255,255,.12);
+  --texto:#EDF2E8;
+  --texto-2:#8E968F;
+  --texto-3:#5A625C;
+  --lima:#C6F94A;
+  --lima-suave:rgba(198,249,74,.12);
+  --sobre-lima:#0B0F0D;
+  --acento:var(--lima);
   --curva:cubic-bezier(.22,.61,.36,1);
+  --radio:18px;
 }
-/* Claro no es el oscuro invertido: es otra composición (§3). */
-@media (prefers-color-scheme: light){
-  :root{
-    --superficie:#FFFFFF; --superficie-alta:#FFFFFF;
-    --linea:rgba(14,18,17,.09);
-    --texto:#0E1211; --texto-2:#5C645E; --texto-3:#8A918B;
-    --lima-tenue:rgba(74,107,18,.10);
-    /* Lima sobre blanco da ~1.4:1. Para texto e iconos se usa oliva (§3.3). */
-    --acento-legible:#4A6B12;
-  }
+/* Claro no es el oscuro invertido: es otra composición. */
+:root[data-tema="claro"]{
+  --fondo:#EEF0EA; --panel:#FFFFFF; --tarjeta:#FFFFFF; --tarjeta-alta:#F7F9F3;
+  --linea:rgba(11,15,13,.09); --linea-fuerte:rgba(11,15,13,.16);
+  --texto:#0B0F0D; --texto-2:#5A625C; --texto-3:#8B938C;
+  --lima-suave:rgba(74,107,18,.10);
+  /* Lima sobre blanco da ~1.4:1. Para texto e iconos, oliva. */
+  --acento:#43620F;
 }
+
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{
-  font-family:Sora,system-ui,sans-serif;color:var(--texto);
-  display:flex;align-items:center;justify-content:center;
-  /* El fondo es luz con caída, no un gradiente de dos paradas (§5). El segundo
-     foco descentrado es lo que evita que se vea generado. */
-  background:
-    radial-gradient(140% 62% at 50% -14%,#16302A 0%,transparent 58%),
-    radial-gradient(100% 44% at 78% 8%,#10201D 0%,transparent 62%),
-    linear-gradient(180deg,#0C100F 0%,#090C0B 54%,#080A0A 100%);
-  background-attachment:fixed;
+  font-family:Sora,system-ui,sans-serif;color:var(--texto);background:var(--fondo);
+  overflow:hidden;
 }
-@media (prefers-color-scheme: light){
-  body{background:
-    radial-gradient(140% 60% at 50% -16%,#FFFFFF 0%,transparent 60%),
-    linear-gradient(180deg,#F2F3EE 0%,#E7E9E2 100%);}
-}
-
-/* En escritorio la app vive dentro de una columna con su propia caída de luz:
-   estirada a 1900px se ve como una web vacía, no como un instrumento. */
-.marco{
-  width:100%;max-width:440px;height:100dvh;max-height:940px;
-  position:relative;display:flex;flex-direction:column;overflow:hidden;
-}
-@media (min-width:600px){
-  .marco{border:1px solid var(--linea);border-radius:34px;height:min(92dvh,880px);
-    box-shadow:0 40px 120px rgba(0,0,0,.5);
-    background:radial-gradient(120% 50% at 50% -8%,rgba(22,48,42,.55) 0%,transparent 60%);}
-}
+button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:var(--linea-fuerte);border-radius:99px}
 
 .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
-.eyebrow{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:500;font-size:10.5px;
-  letter-spacing:.16em;text-transform:uppercase;color:var(--texto-3)}
-.display{font-weight:200;font-size:clamp(30px,8.5vw,40px);letter-spacing:-.035em;line-height:1.08}
-.titulo{font-weight:600;font-size:19px;letter-spacing:-.02em}
+.eyebrow{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:500;
+  font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--texto-3)}
 
-.vista{flex:1;overflow-y:auto;padding:26px 22px 0;display:none;flex-direction:column}
-.vista.activa{display:flex;animation:entrar .24s var(--curva)}
-@keyframes entrar{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.vista::-webkit-scrollbar{width:0}
-
-/* ---------- Orbe: el elemento firma (§7) ---------- */
-.orbe-zona{display:grid;place-items:center;padding:22px 0 6px}
-.orbe{
-  width:min(168px,42vw);aspect-ratio:1;border-radius:50%;position:relative;
-  background:radial-gradient(circle at 34% 28%,#26302C 0%,#111614 55%,#080A0A 100%);
-  box-shadow:0 0 70px rgba(198,249,74,.16),inset 0 0 40px rgba(0,0,0,.6);
-  animation:respirar 4.2s var(--curva) infinite;
+/* ============================================================
+   Estructura
+   ============================================================ */
+.app{
+  height:100dvh;padding:14px;display:grid;gap:14px;
+  grid-template-columns:246px minmax(0,1fr) 340px;
+  /* La luz cae desde arriba y se descentra: dos paradas verticales se ven
+     generadas, un segundo foco fuera de eje no. */
+  background:
+    radial-gradient(120% 55% at 50% -12%,rgba(28,64,52,.5) 0%,transparent 60%),
+    radial-gradient(80% 40% at 88% 4%,rgba(18,48,40,.35) 0%,transparent 65%),
+    var(--fondo);
 }
-/* Luz de borde solo en el arco superior-izquierdo: una luna, no un blob. */
+.app.enfocado{grid-template-columns:0 minmax(0,1fr) 0}
+.app.enfocado .rail,.app.enfocado .lateral{opacity:0;pointer-events:none;overflow:hidden}
+
+.rail,.centro,.lateral{
+  background:var(--panel);border:1px solid var(--linea);border-radius:26px;
+  min-height:0;transition:opacity .3s var(--curva);
+}
+.rail{display:flex;flex-direction:column;padding:22px 14px}
+.centro{position:relative;display:flex;flex-direction:column;overflow:hidden;
+  background:
+    radial-gradient(90% 50% at 50% 42%,rgba(24,56,46,.34) 0%,transparent 70%),
+    var(--panel);}
+.lateral{overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+
+/* ============================================================
+   Rail
+   ============================================================ */
+.marca{display:flex;align-items:center;gap:11px;padding:6px 10px 26px}
+.marca svg{width:28px;height:28px}
+.marca span{font-size:13px;letter-spacing:.34em;font-weight:500;color:var(--texto)}
+
+.rail nav{display:flex;flex-direction:column;gap:3px}
+.rail nav button{
+  display:flex;align-items:center;gap:13px;width:100%;padding:11px 13px;
+  border-radius:13px;color:var(--texto-2);font-size:14.5px;position:relative;
+  transition:color .2s var(--curva),background .2s var(--curva);
+}
+.rail nav button:hover{color:var(--texto);background:rgba(255,255,255,.035)}
+.rail nav button.activo{
+  color:var(--acento);
+  background:linear-gradient(90deg,var(--lima-suave) 0%,transparent 92%);
+}
+.rail nav button.activo::before{
+  content:'';position:absolute;left:0;top:9px;bottom:9px;width:3px;
+  border-radius:0 3px 3px 0;background:var(--lima);
+}
+.rail nav svg{width:19px;height:19px;flex:none}
+svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+.perfil{
+  margin-top:auto;background:var(--tarjeta);border:1px solid var(--linea);
+  border-radius:var(--radio);padding:14px;
+}
+.perfil .fila{display:flex;align-items:center;gap:11px}
+.avatar{
+  width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;
+  border:1px solid rgba(198,249,74,.4);background:var(--lima-suave);
+  color:var(--acento);font-size:12.5px;font-weight:600;letter-spacing:.06em;
+}
+.perfil .quien{font-size:14px;font-weight:500;line-height:1.25}
+.perfil .cual{font-size:11.5px;color:var(--texto-3);margin-top:1px}
+.riel{height:4px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:13px}
+:root[data-tema="claro"] .riel{background:rgba(11,15,13,.08)}
+.riel i{display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,rgba(198,249,74,.55),var(--lima));
+  transition:width .6s var(--curva)}
+.perfil .pie{font-size:11px;color:var(--texto-3);margin-top:8px}
+
+/* ============================================================
+   Centro
+   ============================================================ */
+.cabecera{display:flex;align-items:flex-start;gap:16px;padding:26px 30px 0}
+.cabecera .texto{flex:1;min-width:0}
+.saludo{font-size:clamp(24px,2.4vw,33px);font-weight:300;letter-spacing:-.03em;line-height:1.1}
+.saludo b{font-weight:400;color:var(--acento)}
+.bajada{font-size:13.5px;color:var(--texto-2);margin-top:7px}
+
+.pildora{
+  display:flex;align-items:center;gap:9px;padding:9px 15px;border-radius:99px;
+  border:1px solid var(--linea-fuerte);background:var(--tarjeta);
+  font-size:13px;color:var(--texto-2);white-space:nowrap;
+  transition:border-color .2s var(--curva),color .2s var(--curva);
+}
+.pildora:hover{color:var(--texto);border-color:rgba(198,249,74,.35)}
+.pildora svg{width:16px;height:16px}
+.pildora .luz{width:5px;height:5px;border-radius:50%;background:var(--texto-3)}
+.pildora.on{color:var(--acento);border-color:rgba(198,249,74,.45)}
+.pildora.on .luz{background:var(--lima);box-shadow:0 0 8px var(--lima)}
+
+/* --- escena del orbe --- */
+.escena{flex:1;min-height:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:0 30px;position:relative}
+.orbe-caja{position:relative;display:grid;place-items:center;flex:none}
+#campo{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.orbe{
+  position:relative;border-radius:50%;
+  width:clamp(150px,17vw,236px);aspect-ratio:1;
+  /* Eclipse: la esfera es casi negra y lo que se ve es el borde encendido. */
+  background:radial-gradient(circle at 50% 46%,#0F1513 0%,#0A0E0D 62%,#070908 100%);
+  box-shadow:
+    0 0 0 1px rgba(198,249,74,.14),
+    0 0 26px 2px rgba(198,249,74,.20),
+    0 0 90px 10px rgba(198,249,74,.16),
+    0 0 190px 40px rgba(198,249,74,.10),
+    inset 0 0 60px rgba(0,0,0,.9);
+  transition:box-shadow .5s var(--curva);
+}
+/* El aro no es uniforme: se enciende abajo-derecha y se apaga arriba. */
 .orbe::before{
-  content:'';position:absolute;inset:-1px;border-radius:50%;padding:1.5px;
-  background:conic-gradient(from 190deg,rgba(198,249,74,.85) 0deg,rgba(198,249,74,.15) 70deg,transparent 130deg);
+  content:'';position:absolute;inset:-1px;border-radius:50%;padding:1.4px;
+  background:conic-gradient(from 150deg,
+    rgba(198,249,74,.05) 0deg, rgba(198,249,74,.95) 95deg,
+    rgba(214,255,120,1) 150deg, rgba(198,249,74,.55) 215deg,
+    rgba(198,249,74,.08) 300deg, rgba(198,249,74,.05) 360deg);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   -webkit-mask-composite:xor;mask-composite:exclude;
+  animation:girar 14s linear infinite;
 }
+/* Reflejo interno tenue: le da volumen sin convertirla en una bola de billar. */
 .orbe::after{
-  content:'';position:absolute;inset:0;border-radius:50%;
-  background:radial-gradient(circle at 32% 26%,rgba(198,249,74,.10) 0%,transparent 45%);
+  content:'';position:absolute;inset:8%;border-radius:50%;
+  background:radial-gradient(circle at 38% 30%,rgba(198,249,74,.09) 0%,transparent 52%);
 }
-@keyframes respirar{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
-.orbe.pensando::before{animation:girar 2.4s linear infinite}
 @keyframes girar{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.orbe,.orbe::before{animation:none!important}}
-
-/* ---------- Transcripción que se desvanece (§8) ---------- */
-.transcripcion{flex:1;min-height:96px;display:flex;flex-direction:column;
-  justify-content:flex-end;gap:9px;padding-top:10px;
-  -webkit-mask-image:linear-gradient(180deg,transparent,#000 38%);
-  mask-image:linear-gradient(180deg,transparent,#000 38%)}
-.turno{line-height:1.38;transition:all .24s var(--curva)}
-.turno.actual{font-size:21px;opacity:1;font-weight:300}
-.turno.previo{font-size:17px;opacity:.32}
-.turno.viejo{font-size:15px;opacity:.12}
-.turno.mio{text-align:right;color:var(--texto-2)}
-.turno.coach{text-align:center}
-.estado{text-align:center;padding:14px 0 4px;min-height:26px}
-
-.chips{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;padding-bottom:6px}
-.chip{background:var(--superficie);border:1px solid var(--linea);border-radius:999px;
-  padding:9px 13px;font-size:13px;color:var(--texto-2);cursor:pointer;font-family:inherit;
-  transition:transform .24s var(--curva),opacity .24s var(--curva)}
-.chip:active{transform:scale(.96)}
-.chip[disabled]{opacity:.4}
-
-/* ---------- Controles: píldora de Train unseen, con el círculo a la derecha --- */
-.controles{padding:12px 22px calc(16px + env(safe-area-inset-bottom));display:flex;gap:10px}
-.hablar{flex:1;height:56px;border:0;border-radius:999px;background:var(--lima);
-  color:var(--sobre-lima);font-family:'JetBrains Mono',monospace;font-weight:500;
-  font-size:11px;letter-spacing:.14em;cursor:pointer;touch-action:none;
-  display:flex;align-items:center;justify-content:center;gap:12px;position:relative;
-  transition:transform .18s var(--curva)}
-.hablar:active{transform:scale(.985)}
-.hablar[disabled]{opacity:.45}
-.hablar .punto{position:absolute;right:7px;width:42px;height:42px;border-radius:50%;
-  background:rgba(14,18,17,.14);display:grid;place-items:center;font-size:15px}
-.redondo{width:52px;height:52px;border-radius:50%;background:var(--superficie);
-  border:1px solid var(--linea);color:var(--texto-2);font-size:16px;cursor:pointer;
-  align-self:center;font-family:inherit}
-
-/* ---------- Modo texto (referencia Aura, pantalla 6) ---------- */
-.escritura{display:none;gap:8px;padding:12px 22px calc(16px + env(safe-area-inset-bottom))}
-.escritura input{flex:1;height:52px;border-radius:999px;border:1px solid var(--linea);
-  background:var(--superficie);color:var(--texto);padding:0 18px;font-family:inherit;
-  font-size:15px;outline:none}
-.escritura input:focus{border-color:rgba(198,249,74,.35)}
-.escritura button{width:52px;height:52px;border-radius:50%;border:0;background:var(--lima);
-  color:var(--sobre-lima);font-size:17px;cursor:pointer}
-
-/* ---------- Tarjetas (§9): rampa ordinal, no arcoíris ---------- */
-.tarjeta{background:var(--superficie);border:1px solid var(--linea);border-radius:20px;
-  padding:15px 16px;display:flex;gap:14px;align-items:center;margin-bottom:9px}
-.tarjeta.hoy{background:var(--superficie-alta);border-color:rgba(198,249,74,.28);
-  box-shadow:0 0 32px rgba(198,249,74,.07)}
-.barra{width:3px;align-self:stretch;border-radius:2px;min-height:42px}
-.barra.facil{background:rgba(255,255,255,.22)}
-.barra.calidad{background:rgba(255,255,255,.55)}
-.barra.largo{border:1px solid var(--lima);background:transparent}
-@media (prefers-color-scheme: light){
-  .barra.facil{background:rgba(14,18,17,.18)}
-  .barra.calidad{background:rgba(14,18,17,.45)}
-  .barra.largo{border-color:#4A6B12}
+.orbe-caja.escuchando .orbe{
+  box-shadow:
+    0 0 0 1px rgba(214,255,120,.45),
+    0 0 44px 4px rgba(198,249,74,.42),
+    0 0 140px 22px rgba(198,249,74,.30),
+    0 0 260px 60px rgba(198,249,74,.16),
+    inset 0 0 60px rgba(0,0,0,.9);
 }
-.tarjeta .cuerpo{flex:1;min-width:0}
-.tarjeta .dia{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--texto-3)}
-.tarjeta .tipo{font-weight:600;font-size:15px;margin-top:2px}
-.tarjeta .km{font-family:'JetBrains Mono',monospace;font-size:20px;white-space:nowrap}
-.hecha{font-size:10.5px;letter-spacing:.1em;color:var(--acento-legible)}
+.orbe-caja.pensando .orbe::before{animation-duration:1.5s}
+@media (prefers-reduced-motion:reduce){.orbe::before{animation:none}}
 
-.progreso{display:flex;align-items:center;gap:12px;margin:16px 0 18px}
-.riel{flex:1;height:1px;background:var(--linea);position:relative}
-.riel span{position:absolute;left:0;top:0;background:var(--lima);height:1px}
-.tag{display:inline-block;background:var(--lima-tenue);border:1px solid rgba(198,249,74,.3);
-  border-radius:999px;padding:3px 9px;font-family:'JetBrains Mono',monospace;font-size:11px;
-  color:var(--acento-legible);vertical-align:middle}
-.cuenta{font-family:'JetBrains Mono',monospace;font-size:72px;line-height:1;letter-spacing:-.04em}
-.suave{color:var(--texto-2);line-height:1.6}
+.hint{font-size:12.5px;color:var(--texto-3);margin-top:30px;min-height:18px;text-align:center}
+/* Altura reservada: sin ella, la primera respuesta empuja el orbe hacia
+   arriba y toda la escena da un salto justo cuando el coach empieza a hablar. */
+.dialogo{
+  margin-top:9px;text-align:center;max-width:640px;min-height:76px;
+  display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:7px;
+}
+.turno{line-height:1.35;transition:opacity .3s var(--curva),font-size .3s var(--curva)}
+.turno.n0{font-size:clamp(18px,1.7vw,25px);font-weight:300;opacity:1}
+.turno.n1{font-size:15px;opacity:.30}
+.turno.n2{font-size:13.5px;opacity:.13}
+.turno.mio{color:var(--texto-2)}
 
-/* ---------- Navegación conectada (§10) ---------- */
-nav{display:flex;background:var(--superficie);border-top:1px solid var(--linea)}
-nav button{flex:1;background:none;border:0;color:var(--texto-3);cursor:pointer;
-  padding:13px 0 calc(13px + env(safe-area-inset-bottom));
-  display:grid;place-items:center;gap:5px;font-size:9.5px;letter-spacing:.14em;
-  font-family:'JetBrains Mono',monospace;transition:color .24s var(--curva)}
-nav button.activo{color:var(--acento-legible)}
-nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7}
+.sugerencias{margin-top:26px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.sugerencias .eyebrow{color:var(--acento)}
+.chips{display:flex;gap:11px;flex-wrap:wrap;justify-content:center}
+.chip{
+  display:flex;align-items:center;gap:9px;padding:11px 19px;border-radius:99px;
+  border:1px solid var(--linea-fuerte);background:var(--tarjeta);font-size:14px;
+  color:var(--texto);transition:transform .2s var(--curva),border-color .2s var(--curva);
+}
+.chip svg{width:16px;height:16px;color:var(--acento)}
+.chip:hover{border-color:rgba(198,249,74,.4);transform:translateY(-1px)}
+.chip:active{transform:scale(.97)}
+.chip[disabled]{opacity:.35;pointer-events:none}
 
-/* El diagnóstico NUNCA se abre solo. Vive detrás del botón y se cierra igual. */
-.cajon{display:none;border-top:1px solid var(--linea);padding:14px 22px;
-  max-height:34dvh;overflow-y:auto;background:rgba(0,0,0,.25)}
-.cajon.abierto{display:block}
-.cajon pre{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--texto-3);
-  white-space:pre-wrap;line-height:1.65}
+/* --- controles --- */
+.controles{display:flex;align-items:center;justify-content:center;gap:16px;
+  padding:24px 30px 30px;flex:none}
+.redondo{
+  width:50px;height:50px;border-radius:50%;flex:none;display:grid;place-items:center;
+  border:1px solid var(--linea-fuerte);background:var(--tarjeta);color:var(--texto-2);
+  transition:color .2s var(--curva),border-color .2s var(--curva);
+}
+.redondo:hover{color:var(--texto);border-color:rgba(198,249,74,.35)}
+.redondo svg{width:19px;height:19px}
+.redondo.on{color:var(--acento);border-color:rgba(198,249,74,.45)}
+
+.hablar{
+  position:relative;display:flex;align-items:center;justify-content:center;gap:12px;
+  height:60px;padding:0 46px;border-radius:99px;background:var(--lima);
+  color:var(--sobre-lima);font-family:'JetBrains Mono',monospace;font-weight:500;
+  font-size:12px;letter-spacing:.16em;touch-action:none;
+  /* El anillo exterior es lo que la hace parecer encendida y no pegada. */
+  box-shadow:0 0 0 6px rgba(198,249,74,.10),0 0 46px rgba(198,249,74,.35);
+  transition:transform .18s var(--curva),box-shadow .3s var(--curva);
+}
+.hablar:hover{box-shadow:0 0 0 7px rgba(198,249,74,.14),0 0 70px rgba(198,249,74,.5)}
+.hablar:active{transform:scale(.98)}
+.hablar[disabled]{opacity:.4;box-shadow:none}
+.hablar svg{width:18px;height:18px;stroke-width:1.8}
+
+.escritura{display:none;align-items:center;gap:11px;width:min(560px,100%)}
+.escritura.on{display:flex}
+.escritura input{
+  flex:1;height:52px;border-radius:99px;border:1px solid var(--linea-fuerte);
+  background:var(--tarjeta);color:var(--texto);padding:0 22px;font-family:inherit;
+  font-size:15px;outline:none;
+}
+.escritura input:focus{border-color:rgba(198,249,74,.45)}
+.enviar{width:52px;height:52px;border-radius:50%;flex:none;background:var(--lima);
+  color:var(--sobre-lima);display:grid;place-items:center}
+.enviar svg{width:19px;height:19px;stroke-width:2}
+
+/* ============================================================
+   Tarjetas del lateral
+   ============================================================ */
+.tarjeta{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--radio);padding:16px}
+/* En columna la última se estira: cuatro tarjetas cortas dejan media columna
+   en blanco y la vista se lee como si le faltara algo. En fila haría lo
+   contrario, así que la regla vive dentro de su propio ancho. */
+@media (min-width:1241px){
+  .lateral .tarjeta:last-child{flex:1;min-height:150px}
+}
+.tarjeta > header{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.tarjeta > header svg{width:15px;height:15px;color:var(--acento)}
+.tarjeta > header .eyebrow{color:var(--texto-2)}
+
+.cifra{font-size:42px;font-weight:200;letter-spacing:-.045em;line-height:1}
+.cifra small{font-size:17px;font-weight:300;letter-spacing:0}
+.leyenda{font-size:12.5px;color:var(--texto-2);margin-top:4px}
+
+.semana{display:flex;justify-content:space-between;margin-top:18px}
+.semana div{display:flex;flex-direction:column;align-items:center;gap:8px}
+.punto{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.16)}
+:root[data-tema="claro"] .punto{background:rgba(11,15,13,.14)}
+.punto.hecha{background:var(--lima);box-shadow:0 0 10px rgba(198,249,74,.6)}
+.punto.pendiente{background:transparent;box-shadow:inset 0 0 0 1.5px var(--texto-2)}
+.punto.perdida{background:transparent;box-shadow:inset 0 0 0 1.5px rgba(255,120,120,.5)}
+.semana span{font-size:10px;color:var(--texto-3);font-family:'JetBrains Mono',monospace}
+
+.interna{
+  display:flex;align-items:center;gap:12px;background:var(--tarjeta-alta);
+  border:1px solid var(--linea);border-radius:14px;padding:13px 14px;
+}
+.interna .cuerpo{flex:1;min-width:0}
+.interna .que{font-size:14.5px;font-weight:500}
+.interna .cuando{font-size:12px;color:var(--texto-3);margin-top:2px}
+.icono-lima{width:36px;height:36px;border-radius:11px;flex:none;display:grid;
+  place-items:center;background:var(--lima-suave);color:var(--acento)}
+.icono-lima svg{width:17px;height:17px}
+
+.barra{height:6px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:14px}
+:root[data-tema="claro"] .barra{background:rgba(11,15,13,.08)}
+.barra i{display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,#8FCF2E,var(--lima));transition:width .7s var(--curva)}
+
+.actividad{display:flex;flex-direction:column}
+.actividad li{display:flex;align-items:center;gap:11px;padding:9px 0;list-style:none}
+.actividad li + li{border-top:1px solid var(--linea)}
+.actividad .cuerpo{flex:1;min-width:0}
+.actividad .que{font-size:13.5px;font-weight:500;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.actividad .cuando{font-size:11.5px;color:var(--texto-3);margin-top:1px}
+.actividad .dato{font-size:12px;color:var(--texto-2);font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.vacio{font-size:13px;color:var(--texto-3);line-height:1.55}
+
+/* ============================================================
+   Vistas de plan / agenda / progreso
+   ============================================================ */
+.hoja{flex:1;overflow-y:auto;padding:0 30px 30px}
+.sesion{display:flex;align-items:center;gap:14px;background:var(--tarjeta);
+  border:1px solid var(--linea);border-radius:var(--radio);padding:14px 16px;margin-bottom:9px}
+.sesion.hoy{background:var(--tarjeta-alta);border-color:rgba(198,249,74,.3);
+  box-shadow:0 0 40px rgba(198,249,74,.06)}
+.tira{width:3px;align-self:stretch;min-height:40px;border-radius:2px}
+.tira.facil{background:rgba(255,255,255,.2)}
+.tira.calidad{background:rgba(255,255,255,.5)}
+.tira.largo{background:transparent;box-shadow:inset 0 0 0 1px var(--lima)}
+:root[data-tema="claro"] .tira.facil{background:rgba(11,15,13,.16)}
+:root[data-tema="claro"] .tira.calidad{background:rgba(11,15,13,.42)}
+.sesion .cuerpo{flex:1;min-width:0}
+.sesion .tipo{font-size:15px;font-weight:500;margin-top:2px}
+.sesion .km{font-size:19px;font-family:'JetBrains Mono',monospace}
+.sesion .km small{font-size:11px;color:var(--texto-3)}
+.hecha{font-size:10px;letter-spacing:.12em;color:var(--acento);font-family:'JetBrains Mono',monospace}
+
+/* ---------- Detalle de la sesión ---------- */
+.sesion{cursor:pointer}
+.sesion .abrir{color:var(--texto-3);transition:transform .25s var(--curva)}
+.sesion.abierta .abrir{transform:rotate(180deg)}
+.receta{display:none;padding:2px 16px 16px;margin:-9px 0 9px;
+  background:var(--tarjeta);border:1px solid var(--linea);border-top:0;
+  border-radius:0 0 var(--radio) var(--radio)}
+.receta.abierta{display:block;animation:asomar .22s var(--curva)}
+@keyframes asomar{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.tramo{display:flex;gap:12px;padding:11px 0}
+.tramo + .tramo{border-top:1px solid var(--linea)}
+.tramo .km{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--acento);
+  min-width:52px;padding-top:2px}
+.tramo .titulo{font-size:13.5px;font-weight:500}
+.tramo .detalle{font-size:13px;color:var(--texto-2);line-height:1.5;margin-top:3px}
+.esfuerzo{display:flex;gap:9px;align-items:flex-start;margin-top:12px;padding-top:12px;
+  border-top:1px solid var(--linea);font-size:12.5px;color:var(--texto-2);line-height:1.5}
+.esfuerzo svg{width:15px;height:15px;color:var(--acento);flex:none;margin-top:2px}
+.porque{font-size:12.5px;color:var(--texto-3);line-height:1.55;margin-top:9px;font-style:italic}
+
+/* ---------- Calendario ---------- */
+.cal-cabeza{display:flex;align-items:center;justify-content:space-between;margin:4px 0 14px}
+.cal-mes{font-size:17px;font-weight:500;text-transform:capitalize}
+.cal-nav{display:flex;gap:6px}
+.cal-nav button{width:32px;height:32px;border-radius:10px;border:1px solid var(--linea);
+  color:var(--texto-2);display:grid;place-items:center}
+.cal-nav button:hover{color:var(--texto);border-color:var(--linea-fuerte)}
+.cal-nav svg{width:15px;height:15px}
+.cal-rejilla{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-rejilla .cabecera-dia{text-align:center;padding-bottom:6px;font-size:9.5px;
+  letter-spacing:.14em;color:var(--texto-3);font-family:'JetBrains Mono',monospace}
+/* Alto acotado, no cuadrado: con aspect-ratio en una columna ancha cada celda
+   salía de 160 px y la lista de carreras quedaba fuera de la pantalla. */
+.dia{height:clamp(44px,6.4vh,60px);border-radius:11px;border:1px solid transparent;
+  background:var(--tarjeta);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:4px;font-size:13px;color:var(--texto-2);
+  transition:border-color .18s var(--curva)}
+.dia:hover{border-color:var(--linea-fuerte);color:var(--texto)}
+.dia.fuera{background:transparent;color:var(--texto-3);opacity:.35}
+.dia.hoy{border-color:rgba(198,249,74,.5);color:var(--texto);font-weight:600}
+.dia.carrera{background:var(--lima-suave);border-color:rgba(198,249,74,.45);color:var(--acento)}
+.dia .marcas{display:flex;gap:3px;height:5px;align-items:center}
+.dia .marcas i{width:4px;height:4px;border-radius:50%;background:var(--texto-2);opacity:.7}
+.dia .marcas i.largo{background:var(--lima)}
+.dia .marcas i.calidad{background:var(--texto-2)}
+.dia .marcas i.bandera{width:5px;height:5px;background:var(--lima);
+  box-shadow:0 0 7px rgba(198,249,74,.8)}
+
+.carrera-fila{display:flex;align-items:center;gap:13px;background:var(--tarjeta);
+  border:1px solid var(--linea);border-radius:14px;padding:13px 15px;margin-bottom:8px}
+.carrera-fila.objetivo{border-color:rgba(198,249,74,.35);background:var(--tarjeta-alta)}
+.carrera-fila .cuerpo{flex:1;min-width:0}
+.carrera-fila .nombre{font-size:14.5px;font-weight:500}
+.carrera-fila .cuando{font-size:12px;color:var(--texto-3);margin-top:2px}
+.carrera-fila .faltan{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--acento);white-space:nowrap}
+.quitar{width:30px;height:30px;border-radius:9px;color:var(--texto-3);display:grid;place-items:center;flex:none}
+.quitar:hover{color:#FF8A8A;background:rgba(255,138,138,.10)}
+.quitar svg{width:14px;height:14px}
+
+/* ---------- Formulario ---------- */
+.forma{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--radio);
+  padding:16px;margin-bottom:14px;display:none}
+.forma.abierta{display:block;animation:asomar .22s var(--curva)}
+.forma .campos{display:grid;grid-template-columns:1fr 130px;gap:9px;margin:12px 0 9px}
+.forma input,.forma textarea{width:100%;border-radius:11px;border:1px solid var(--linea-fuerte);
+  background:var(--fondo);color:var(--texto);padding:11px 13px;font-family:inherit;
+  font-size:14px;outline:none;resize:none}
+.forma input:focus,.forma textarea:focus{border-color:rgba(198,249,74,.45)}
+.forma .pie{display:flex;gap:9px;justify-content:flex-end;margin-top:11px}
+.boton{display:inline-flex;align-items:center;gap:8px;padding:10px 17px;
+  border-radius:99px;font-size:13px;font-weight:500;
+  border:1px solid var(--linea-fuerte);color:var(--texto-2);white-space:nowrap}
+/* Sin tamaño explícito el SVG toma su tamaño natural y revienta el botón. */
+.boton svg{width:15px;height:15px;flex:none}
+.boton:hover{color:var(--texto)}
+.boton.principal{background:var(--lima);color:var(--sobre-lima);border-color:transparent}
+.boton.riesgo{color:#FF8A8A;border-color:rgba(255,138,138,.3)}
+.boton.riesgo:hover{background:rgba(255,138,138,.10);color:#FF8A8A}
+.aviso{font-size:12.5px;color:#FF8A8A;margin-top:9px;display:none}
+.aviso.on{display:block}
+
+.encabezado-hoja{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin:2px 0 14px}
+
+.grafica{display:flex;align-items:flex-end;gap:5px;
+  height:clamp(190px,44vh,360px);margin:22px 0 10px}
+.grafica div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+  align-items:center;gap:7px;height:100%}
+.grafica i{width:100%;border-radius:5px 5px 2px 2px;background:rgba(255,255,255,.09);
+  transition:height .6s var(--curva)}
+:root[data-tema="claro"] .grafica i{background:rgba(11,15,13,.10)}
+.grafica .actual i{background:linear-gradient(180deg,var(--lima),rgba(198,249,74,.35));
+  box-shadow:0 0 22px rgba(198,249,74,.3)}
+.grafica .descarga i{background:repeating-linear-gradient(45deg,
+  rgba(255,255,255,.14) 0 3px,transparent 3px 6px)}
+.grafica b{font-size:9.5px;color:var(--texto-3);font-weight:400;
+  font-family:'JetBrains Mono',monospace}
+.metricas{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+
+/* Diagnóstico: NUNCA se abre solo. Solo por el engrane. */
+.cajon{display:none;border-top:1px solid var(--linea);padding:14px 30px;
+  max-height:30dvh;overflow-y:auto;background:rgba(0,0,0,.28)}
+:root[data-tema="claro"] .cajon{background:rgba(11,15,13,.04)}
+.cajon.on{display:block}
+.cajon pre{font-family:'JetBrains Mono',monospace;font-size:10.5px;
+  color:var(--texto-3);white-space:pre-wrap;line-height:1.7}
+
+/* ============================================================
+   Adaptación. La referencia es de escritorio; el teléfono no se rompe.
+   ============================================================ */
+@media (max-width:1240px){
+  .app{grid-template-columns:246px minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  .rail{grid-row:1 / span 2}
+  .lateral{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:12px}
+  .lateral .tarjeta{min-width:250px;flex:1}
+  .app.enfocado{grid-template-columns:0 minmax(0,1fr)}
+}
+@media (max-width:900px){
+  body{overflow:auto}
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;
+    padding:0;gap:0;height:100dvh}
+  .rail,.centro,.lateral{border-radius:0;border:0}
+  .rail{grid-row:auto;order:3;flex-direction:row;padding:0;
+    border-top:1px solid var(--linea);background:var(--panel)}
+  .marca,.perfil{display:none}
+  .rail nav{flex-direction:row;width:100%}
+  .rail nav button{flex-direction:column;gap:5px;font-size:9.5px;letter-spacing:.1em;
+    font-family:'JetBrains Mono',monospace;border-radius:0;
+    padding:11px 0 calc(11px + env(safe-area-inset-bottom))}
+  .rail nav button.activo{background:none}
+  .rail nav button.activo::before{left:50%;transform:translateX(-50%);top:0;bottom:auto;
+    width:26px;height:2px;border-radius:0 0 3px 3px}
+  .lateral{order:2;border-top:1px solid var(--linea);max-height:206px;padding:12px 20px}
+  .lateral .tarjeta{min-width:224px;height:100%;overflow:hidden}
+  .cabecera{padding:18px 20px 0;align-items:center}
+  .saludo{font-size:23px}
+  .bajada{display:none}          /* en 414px roba tres líneas y no dice nada nuevo */
+  .pildora span{display:none}    /* solo el icono: la etiqueta no cabe */
+  .pildora{padding:10px;gap:0}
+  .hoja{padding-left:20px;padding-right:20px}
+
+  /* La escena scrollea en vez de desbordarse. Sin esto el orbe —que tiene
+     aspect-ratio y no encoge— se montaba encima del saludo y de los chips. */
+  /* flex-start + márgenes auto en los extremos, y NO justify-content:center:
+     con overflow y contenido más alto que la caja, centrar recorta la parte
+     de arriba y la deja inalcanzable. Así se centra cuando cabe y scrollea
+     cuando no. */
+  .escena{padding:6px 20px 0;justify-content:flex-start;overflow-y:auto}
+  .escena > .orbe-caja{margin-top:auto}
+  .escena > .sugerencias{margin-bottom:auto}
+  .orbe{width:clamp(112px,33vw,158px)}
+  .hint{margin-top:20px}
+  .dialogo{min-height:0}
+  .sugerencias{margin-top:18px;width:100%;align-items:stretch;padding-bottom:6px}
+  .sugerencias .eyebrow{text-align:center}
+  /* Carrusel en vez de apilarse: tres chips en columna empujaban los controles
+     fuera de la pantalla. */
+  .chips{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;
+    padding:2px 20px;margin:0 -20px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none}
+
+  .controles{padding:14px 20px 18px;gap:12px}
+  .hablar{flex:1;padding:0 16px;font-size:11px;letter-spacing:.1em}
+  .escritura{width:auto;flex:1}
+  .app.enfocado{grid-template-columns:minmax(0,1fr)}
+  .app.enfocado .lateral,.app.enfocado .rail{display:none}
+}
 </style>
 </head>
 <body>
-<div class="marco">
+<div class="app" id="app">
 
-  <section class="vista activa" id="v-coach">
-    <p class="eyebrow" id="cinta">PACER</p>
-    <h1 class="display" id="saludo">Buenas</h1>
+  <!-- ================= RAIL ================= -->
+  <aside class="rail">
+    <div class="marca">
+      <!-- La R con estelas de velocidad. Las líneas arrancan donde termina la
+           letra, no la cruzan: cruzándola se lee como una tachadura. -->
+      <svg viewBox="0 0 32 32" style="color:var(--lima)" stroke-width="2.2">
+        <path d="M13 27V6h7.5a5.5 5.5 0 0 1 0 11H13"/>
+        <path d="M19 17l6.5 10"/>
+        <path d="M8 10H4M6.5 16h-4M8 22H4" style="opacity:.5"/>
+      </svg>
+      <span>PACER</span>
+    </div>
+    <nav id="nav"></nav>
+    <div class="perfil" id="perfil"></div>
+  </aside>
 
-    <div class="orbe-zona"><div class="orbe" id="orbe"></div></div>
-    <div class="transcripcion" id="transcripcion"></div>
-    <p class="eyebrow estado" id="estado">LISTO</p>
-    <div class="chips" id="chips"></div>
-  </section>
+  <!-- ================= CENTRO ================= -->
+  <main class="centro">
+    <div class="cabecera">
+      <div class="texto">
+        <h1 class="saludo" id="saludo">Buenas</h1>
+        <p class="bajada" id="bajada">Tu coach está listo cuando tú lo estés.</p>
+      </div>
+      <button class="pildora" id="btn-enfoque">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg>
+        <span>Modo enfoque</span> <i class="luz"></i>
+      </button>
+    </div>
 
-  <section class="vista" id="v-plan">
-    <p class="eyebrow" id="cinta-plan">TU PLAN</p>
-    <h1 class="display">Tu plan <span class="tag" id="tag-version" hidden></span></h1>
-    <div id="cuerpo-plan"></div>
-  </section>
+    <!-- vista coach -->
+    <section class="escena" id="v-coach">
+      <div class="orbe-caja" id="orbe-caja">
+        <canvas id="campo"></canvas>
+        <div class="orbe"></div>
+      </div>
+      <p class="hint" id="hint">¿Listo para continuar tu entrenamiento?</p>
+      <div class="dialogo" id="dialogo"></div>
+      <div class="sugerencias" id="sugerencias">
+        <p class="eyebrow">Sugerencias</p>
+        <div class="chips" id="chips"></div>
+      </div>
+    </section>
 
-  <section class="vista" id="v-agenda">
-    <p class="eyebrow">TU CARRERA OBJETIVO</p>
-    <h1 class="display">Agenda</h1>
-    <div id="cuerpo-agenda"></div>
-  </section>
+    <!-- vistas de datos -->
+    <section class="hoja" id="v-plan" hidden></section>
+    <section class="hoja" id="v-agenda" hidden></section>
+    <section class="hoja" id="v-progreso" hidden></section>
 
-  <div class="controles" id="controles">
-    <button class="redondo" id="btn-teclado" title="Escribir">⌨</button>
-    <button class="hablar" id="hablar">MANTÉN PARA HABLAR<span class="punto">↑</span></button>
-  </div>
+    <div class="controles" id="controles">
+      <button class="redondo" id="btn-teclado" title="Escribir" aria-label="Escribir">
+        <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
+      </button>
+      <button class="hablar" id="hablar">
+        <svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg>
+        MANTÉN PARA HABLAR
+      </button>
+      <form class="escritura" id="escritura">
+        <input id="campo-texto" placeholder="Escríbele al coach…" autocomplete="off">
+        <button class="enviar" type="submit" aria-label="Enviar">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </form>
+      <button class="redondo" id="btn-diag" title="Diagnóstico" aria-label="Diagnóstico">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 8 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H2a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 8a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
 
-  <form class="escritura" id="escritura">
-    <button type="button" class="redondo" id="btn-voz" title="Volver a la voz">🎙</button>
-    <input id="campo" placeholder="Escríbele al coach…" autocomplete="off">
-    <button type="submit" aria-label="Enviar">↑</button>
-  </form>
+    <div class="cajon" id="cajon"><pre id="diagnostico"></pre></div>
+  </main>
 
-  <div class="cajon" id="cajon"><pre id="diagnostico"></pre></div>
-
-  <nav>
-    <button data-v="coach" class="activo">
-      <svg viewBox="0 0 24 24"><path d="M3 12h3l2-6 4 12 3-9 2 3h4"/></svg>COACH</button>
-    <button data-v="plan">
-      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>PLAN</button>
-    <button data-v="agenda">
-      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>AGENDA</button>
-    <button data-v="diag" id="nav-diag">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg>DIAG</button>
-  </nav>
+  <!-- ================= LATERAL ================= -->
+  <aside class="lateral" id="lateral"></aside>
 </div>
 
 <script>
+'use strict';
 const $ = (s) => document.querySelector(s);
-const orbe = $('#orbe'), estado = $('#estado'), diag = $('#diagnostico');
-const transcripcion = $('#transcripcion'), chips = $('#chips');
-let turnos = [];
+const app = $('#app'), diag = $('#diagnostico');
 
-// Primer mensaje: lo que de verdad arranca un diagnóstico, no frases sueltas.
-const INICIALES = ['Quiero correr un 21k', 'Soy nuevo corriendo', '¿Por dónde empiezo?'];
-// Ya con plan, lo útil es reportar y consultar.
-const CON_PLAN = ['¿Qué me toca hoy?', 'Ayer acabé muerto', 'Me duele la rodilla'];
+/* ============================================================
+   Iconos. Un único lugar donde vive el trazo.
+   ============================================================ */
+const ICONO = {
+  coach:'<path d="M3 12h3l2.5-7 4 14 3-10 2 3H21"/>',
+  plan:'<rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h4"/>',
+  agenda:'<rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/>',
+  progreso:'<path d="M4 20V10M10 20V4M16 20v-7M22 20V8"/>',
+  racha:'<path d="M12 2.5s5.5 4.5 5.5 9.5a5.5 5.5 0 1 1-11 0c0-2 1-3.5 1-3.5s.5 2 2 2c0-3.5 2.5-6 2.5-8z"/>',
+  proxima:'<rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/>',
+  semanal:'<path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/>',
+  reciente:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.5"/>',
+  abajo:'<path d="M6 9l6 6 6-6"/>',
+  izq:'<path d="M15 6l-6 6 6 6"/>',
+  der:'<path d="M9 6l6 6-6 6"/>',
+  mas:'<path d="M12 5v14M5 12h14"/>',
+  equis:'<path d="M6 6l12 12M18 6L6 18"/>',
+  bandera:'<path d="M5 21V4M5 4h11l-2 3.5L16 11H5"/>',
+  pulso:'<path d="M3 12h4l2-5 3 10 2.5-6 1.5 3h5"/>',
+  bote:'<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+  corredor:'<circle cx="15" cy="4.5" r="2"/><path d="M9.5 21l2-5.5-3-2.5 1-5 3.5 2 3 1"/><path d="M11.5 13l2 3 1 5M8 9l3.5-1.5"/>',
+  zapato:'<path d="M3 18h16a2 2 0 0 0 2-2c0-1.4-1-2.1-2.4-2.6l-4.1-1.5-3-3.4a1.4 1.4 0 0 0-2.4.9V13H4a1 1 0 0 0-1 1z"/><path d="M9.5 13v-2"/>',
+  cansado:'<path d="M18 15.5A6.5 6.5 0 1 1 8.5 6.2a5 5 0 0 0 9.5 9.3z"/><path d="M17 3h4l-4 4h4"/>',
+  reloj:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  duda:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.9-.9 1.6v.4M12 17h.01"/>',
+  flecha:'<path d="M5 12h13M13 6l6 6-6 6"/>',
+};
+const svg = (id, extra = '') =>
+  `<svg viewBox="0 0 24 24" ${extra}>${ICONO[id] || ''}</svg>`;
 
-const anotar = (l) => { diag.textContent += l + '\n'; };
-const ponerEstado = (t) => { estado.textContent = t; };
+/* ============================================================
+   Estado
+   ============================================================ */
+let datos = null;               // último /api/plan
+let carreras = [];              // último /api/carreras
+let turnos = [];                // últimos dichos, para el diálogo
+let vista = 'coach';
+let ocupado = false;
+let escribiendo = false;
+let mesVisible = null;          // primer día del mes que muestra el calendario
+let diaElegido = null;          // ISO del día sobre el que se está apuntando
 
-/* Transcripción con desvanecido (§8): en voz no quieres un historial, quieres
-   el turno actual con contexto suficiente. */
-function decir(quien, texto){
-  turnos = [...turnos, {quien, texto}].slice(-3);
-  const clases = ['actual','previo','viejo'];
-  transcripcion.innerHTML = '';
-  turnos.forEach((t, i) => {
-    const p = document.createElement('p');
-    p.className = `turno ${clases[turnos.length-1-i]} ${t.quien==='mio'?'mio':'coach'}`;
-    p.textContent = t.texto;
-    transcripcion.appendChild(p);
-  });
-}
+const SECCIONES = [
+  {id:'coach', etiqueta:'Coach'},
+  {id:'plan', etiqueta:'Plan'},
+  {id:'agenda', etiqueta:'Agenda'},
+  {id:'progreso', etiqueta:'Progreso'},
+];
 
-function pintarChips(lista){
-  chips.innerHTML = lista.map(s => `<button class="chip">${s}</button>`).join('');
-  chips.querySelectorAll('.chip').forEach(b => { b.onclick = () => enviarTexto(b.textContent); });
-}
+const NOMBRE_TIPO = {facil:'Carrera suave', calidad:'Sesión de calidad', largo:'Fondo largo'};
+const NOMBRE_NIVEL = {nuevo:'Empezando', principiante:'Principiante',
+  intermedio:'Intermedio', avanzado:'Avanzado'};
+const NOMBRE_OBJETIVO = {'5k':'5K', '10k':'10K', '21k':'21K', maraton:'Maratón'};
+const NOMBRE_BLOQUE = {base:'Base', construccion:'Construcción', pico:'Pico', tapering:'Tapering'};
+const NOMBRE_SENSACION = {facil:'Fácil', normal:'Normal', pesada:'Pesada',
+  muy_dura:'Muy dura', con_dolor:'Con dolor'};
 
-(function saludar(){
-  const h = new Date().getHours();
-  $('#saludo').textContent = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
-  pintarChips(INICIALES);
-})();
+// Las sugerencias dependen de en qué punto está la conversación: antes de
+// tener plan lo útil es arrancarlo, después es reportar y consultar.
+const SIN_PLAN = [
+  {i:'zapato', t:'Quiero correr un 21K'},
+  {i:'corredor', t:'Nunca he corrido'},
+  {i:'duda', t:'¿Por dónde empiezo?'},
+];
+const CON_PLAN = [
+  {i:'reloj', t:'¿Qué me toca hoy?'},
+  {i:'cansado', t:'Ayer acabé muerto'},
+  {i:'zapato', t:'Me duele la rodilla'},
+];
 
-/* Un solo lugar decide qué barra inferior se ve: dos condiciones (¿estoy en
-   coach? ¿estoy escribiendo?) con dos elementos se descoordinan solas. */
-let vistaActual = 'coach', escribiendo = false;
-function pintarBarra(){
-  const enCoach = vistaActual === 'coach';
-  $('#controles').style.display = enCoach && !escribiendo ? 'flex' : 'none';
-  $('#escritura').style.display = enCoach && escribiendo ? 'flex' : 'none';
-}
+const anotar = (linea) => {
+  diag.textContent += linea + '\n';
+  diag.scrollTop = diag.scrollHeight;
+};
+const decirHint = (t) => { $('#hint').textContent = t; };
+const escapar = (t) => String(t ?? '').replace(/[&<>"]/g,
+  (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-document.querySelectorAll('nav button').forEach(b => {
-  b.onclick = () => {
-    if (b.dataset.v === 'diag'){ $('#cajon').classList.toggle('abierto'); b.classList.toggle('activo'); return; }
-    document.querySelectorAll('nav button').forEach(x => { if (x.dataset.v !== 'diag') x.classList.remove('activo'); });
-    b.classList.add('activo');
-    document.querySelectorAll('.vista').forEach(s => s.classList.remove('activa'));
-    $('#v-' + b.dataset.v).classList.add('activa');
-    vistaActual = b.dataset.v;
-    pintarBarra();
-    if (vistaActual !== 'coach') cargarPlan();
-  };
+/* ============================================================
+   Navegación
+   ============================================================ */
+$('#nav').innerHTML = SECCIONES.map((s) =>
+  `<button data-v="${s.id}">${svg(s.id)}<span>${s.etiqueta}</span></button>`).join('');
+
+$('#nav').querySelectorAll('button').forEach((b) => {
+  b.onclick = () => irA(b.dataset.v);
 });
 
-// Escribir es una alternativa a la voz, no una puerta de una sola dirección.
-$('#btn-teclado').onclick = () => { escribiendo = true; pintarBarra(); $('#campo').focus(); };
-$('#btn-voz').onclick = () => { escribiendo = false; pintarBarra(); };
+function irA(destino){
+  vista = destino;
+  $('#nav').querySelectorAll('button').forEach((b) =>
+    b.classList.toggle('activo', b.dataset.v === destino));
+  ['coach','plan','agenda','progreso'].forEach((v) => {
+    const nodo = $('#v-' + v);
+    if (v === 'coach') nodo.style.display = destino === 'coach' ? 'flex' : 'none';
+    else nodo.hidden = destino !== v;
+  });
+  // Los controles de voz solo tienen sentido frente al coach.
+  $('#controles').style.display = destino === 'coach' ? 'flex' : 'none';
+  pintar();
+}
+
+$('#btn-enfoque').onclick = () => {
+  const on = app.classList.toggle('enfocado');
+  $('#btn-enfoque').classList.toggle('on', on);
+  if (on) irA('coach');
+  medirCanvas();
+};
+$('#btn-diag').onclick = () => {
+  $('#cajon').classList.toggle('on');
+  $('#btn-diag').classList.toggle('on');
+};
+$('#btn-teclado').onclick = () => {
+  escribiendo = !escribiendo;
+  $('#escritura').classList.toggle('on', escribiendo);
+  $('#hablar').style.display = escribiendo ? 'none' : 'flex';
+  $('#btn-teclado').classList.toggle('on', escribiendo);
+  if (escribiendo) $('#campo-texto').focus();
+};
 $('#escritura').onsubmit = (e) => {
   e.preventDefault();
-  const t = $('#campo').value.trim();
-  if (t){ $('#campo').value = ''; enviarTexto(t); }
+  const t = $('#campo-texto').value.trim();
+  if (t){ $('#campo-texto').value = ''; enviarTexto(t); }
 };
 
-/* Un solo elemento de audio, desbloqueado durante el gesto del usuario: en
-   móvil un play() que no nace de un toque queda a merced del autoplay. */
+/* ============================================================
+   El campo del orbe. Canvas y no CSS porque lo que le da vida es
+   que reaccione al volumen real del micrófono, y eso no se anima
+   con keyframes fijos.
+   ============================================================ */
+const lienzo = $('#campo'), pincel = lienzo.getContext('2d');
+let ancho = 0, alto = 0, radio = 0;
+let energia = 0.12, objetivoEnergia = 0.12, fase = 0;
+const PARTICULAS = [];
+
+function medirCanvas(){
+  const caja = $('#orbe-caja').getBoundingClientRect();
+  const escena = $('#v-coach').getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // El campo desborda la esfera: es un viento que sale de ella, no un aro.
+  ancho = Math.max(320, Math.round(escena.width));
+  alto = Math.round(caja.height * 2.0);
+  radio = caja.width / 2;
+  lienzo.width = ancho * dpr;
+  lienzo.height = alto * dpr;
+  lienzo.style.width = ancho + 'px';
+  lienzo.style.height = alto + 'px';
+  lienzo.style.left = ((caja.width - ancho) / 2) + 'px';
+  lienzo.style.top = ((caja.height - alto) / 2) + 'px';
+  pincel.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+/* Las partículas NO son ruido: cada una viaja por una línea de campo que sale
+   del ecuador de la esfera y se abre en abanico. Distribuirlas al azar da polvo
+   disperso; agruparlas en carriles es lo que produce las estelas. */
+const CARRILES = 22;
+
+function sembrar(){
+  PARTICULAS.length = 0;
+  for (let lado of [-1, 1]){
+    for (let c = 0; c < CARRILES; c++){
+      // Reparto con signo alterno para que no se apilen todas de un lado del eje.
+      const k = ((c % 2 ? 1 : -1) * (Math.floor(c / 2) + 0.5)) / (CARRILES / 2);
+      const porCarril = 7 + Math.round((1 - Math.abs(k)) * 7);
+
+      for (let i = 0; i < porCarril; i++){
+        PARTICULAS.push({
+          lado,
+          k,
+          // Escalonadas dentro del carril: nacen del borde en fila india.
+          t: (i / porCarril) + Math.random() * 0.05,
+          vel: 0.0016 + Math.random() * 0.0016,
+          desfase: Math.random() * Math.PI * 2,
+          tam: 0.75 + Math.random() * 0.85,
+        });
+      }
+    }
+  }
+}
+
+function animar(){
+  requestAnimationFrame(animar);
+  if (!ancho || document.hidden) return;
+
+  // La energía persigue su objetivo en vez de saltar: un corte se ve digital.
+  energia += (objetivoEnergia - energia) * 0.08;
+  fase += 0.010 + energia * 0.030;
+
+  pincel.clearRect(0, 0, ancho, alto);
+  const cx = ancho / 2, cy = alto / 2;
+  const alcance = ancho / 2 - radio;
+
+  for (const p of PARTICULAS){
+    p.t += p.vel * (0.5 + energia * 1.8);
+    if (p.t > 1) p.t -= 1;
+
+    const t = p.t;
+    const x = cx + p.lado * (radio * 0.99 + t * alcance);
+    // El abanico es PLANO: se abre poco y viaja lejos. Abrirlo más lo convierte
+    // en una nube alrededor de la esfera y pierde la lectura de estela.
+    const y = cy
+      + p.k * radio * (0.10 + t * 0.62)
+      + Math.sin(fase * 1.6 + p.desfase + t * 3.2) * radio * (0.02 + t * 0.10);
+
+    // Se enciende al salir del borde y se apaga despacio: así llega al extremo
+    // en vez de morirse a un tercio del camino.
+    const vida = Math.min(1, t * 5) * (1 - t * 0.88);
+    const alfa = vida * (0.30 + energia * 0.85) * (1 - Math.abs(p.k) * 0.30);
+    if (alfa <= 0.006) continue;
+
+    pincel.fillStyle = `rgba(206,252,96,${alfa.toFixed(3)})`;
+    pincel.beginPath();
+    pincel.arc(x, y, p.tam * (0.85 + energia * 0.5), 0, Math.PI * 2);
+    pincel.fill();
+  }
+}
+
+sembrar();
+animar();
+addEventListener('resize', medirCanvas);
+
+/* ============================================================
+   Voz
+   ============================================================ */
 const reproductor = new Audio();
 let desbloqueado = false;
+// En móvil un play() que no nace de un toque queda a merced del autoplay:
+// hay que estrenar el elemento durante el gesto, aunque sea en silencio.
 function desbloquearAudio(){
   if (desbloqueado) return;
   desbloqueado = true;
@@ -318,60 +817,64 @@ function desbloquearAudio(){
   reproductor.muted = false;
 }
 
-/* El halo responde al micrófono REAL (§7). Un bucle fijo se nota de inmediato
-   y mata la sensación de que el coach te está oyendo. */
-let audioCtx, analizador, datos, animando;
+let contexto, analizador, muestras, midiendo;
 function escucharVolumen(flujo){
   try{
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    analizador = audioCtx.createAnalyser();
+    contexto = contexto || new (window.AudioContext || window.webkitAudioContext)();
+    analizador = contexto.createAnalyser();
     analizador.fftSize = 256;
-    audioCtx.createMediaStreamSource(flujo).connect(analizador);
-    datos = new Uint8Array(analizador.frequencyBinCount);
-    const pintar = () => {
-      analizador.getByteFrequencyData(datos);
-      const v = datos.reduce((a,b) => a+b, 0) / datos.length / 255;
-      orbe.style.boxShadow = `0 0 ${70+v*140}px rgba(198,249,74,${.16+v*.5}),inset 0 0 40px rgba(0,0,0,.6)`;
-      animando = requestAnimationFrame(pintar);
+    contexto.createMediaStreamSource(flujo).connect(analizador);
+    muestras = new Uint8Array(analizador.frequencyBinCount);
+    const leer = () => {
+      analizador.getByteFrequencyData(muestras);
+      let suma = 0;
+      for (const v of muestras) suma += v;
+      objetivoEnergia = 0.25 + (suma / muestras.length / 255) * 2.4;
+      midiendo = requestAnimationFrame(leer);
     };
-    pintar();
-  }catch(e){ /* sin analizador el orbe sigue respirando */ }
+    leer();
+  }catch(e){ objetivoEnergia = 0.8; }  // sin analizador, al menos que se note viva
 }
-const dejarDeEscuchar = () => { cancelAnimationFrame(animando); orbe.style.boxShadow = ''; };
+const dejarDeMedir = () => { cancelAnimationFrame(midiendo); objetivoEnergia = 0.12; };
 
 let grabadora = null, trozos = [];
 const extension = (t) => t.includes('mp4') ? 'mp4' : t.includes('ogg') ? 'ogg' : 'webm';
 
-function fallar(mensaje, detalle){
-  ponerEstado(mensaje);
-  anotar(detalle);           // al cajón, que el usuario abre si quiere
-  setTimeout(() => ponerEstado('LISTO'), 4000);
+function fallar(visible, detalle){
+  decirHint(visible);
+  anotar(detalle);   // el detalle técnico va al cajón, que abre quien quiera
+  setTimeout(() => decirHint(hintPorDefecto()), 5000);
 }
 
+const hintPorDefecto = () => datos?.hay_plan
+  ? '¿Listo para continuar tu entrenamiento?'
+  : 'Cuéntame qué quieres correr y te armo el plan.';
+
 async function empezar(){
-  if (grabadora) return;
+  if (grabadora || ocupado) return;
   desbloquearAudio();
 
   // navigator.mediaDevices solo existe en contexto seguro: HTTPS o localhost.
-  // Aplica a TODOS los navegadores, no solo a Safari.
+  // Aplica a todos los navegadores, no solo a Safari.
   if (!navigator.mediaDevices){
-    fallar('SIN MICRÓFONO · USA EL TECLADO',
+    fallar('Sin micrófono aquí. Usa el teclado.',
       'navigator.mediaDevices no existe · contexto seguro: ' + window.isSecureContext +
-      '\nSe necesita HTTPS. En http:// solo funciona desde localhost.');
+      '\nHace falta HTTPS. En http:// solo funciona desde localhost.');
     return;
   }
   try{
     const flujo = await navigator.mediaDevices.getUserMedia({audio:true});
-    // 24 kbps alcanza de sobra para voz y recorta el archivo a la mitad.
+    // 24 kbps sobra para voz y deja el archivo a la mitad.
     grabadora = new MediaRecorder(flujo, {audioBitsPerSecond:24000});
     trozos = [];
-    grabadora.ondataavailable = e => trozos.push(e.data);
+    grabadora.ondataavailable = (e) => trozos.push(e.data);
     grabadora.onstop = enviarVoz;
     grabadora.start();
     escucharVolumen(flujo);
-    ponerEstado('ESCUCHANDO…');
+    $('#orbe-caja').classList.add('escuchando');
+    decirHint('Te escucho…');
   }catch(err){
-    fallar('SIN MICRÓFONO · USA EL TECLADO', 'getUserMedia falló: ' + err.name);
+    fallar('Sin micrófono aquí. Usa el teclado.', 'getUserMedia falló: ' + err.name);
     grabadora = null;
   }
 }
@@ -379,16 +882,19 @@ async function empezar(){
 function parar(){
   if (!grabadora) return;
   grabadora.stop();
-  grabadora.stream.getTracks().forEach(t => t.stop());
-  dejarDeEscuchar();
-  pensando(true);
+  grabadora.stream.getTracks().forEach((t) => t.stop());
+  dejarDeMedir();
+  $('#orbe-caja').classList.remove('escuchando');
+  trabajando(true);
 }
 
-function pensando(si){
-  orbe.classList.toggle('pensando', si);
+function trabajando(si){
+  ocupado = si;
+  $('#orbe-caja').classList.toggle('pensando', si);
   $('#hablar').disabled = si;
-  chips.querySelectorAll('.chip').forEach(c => { c.disabled = si; });
-  if (si) ponerEstado('PENSANDO…');
+  $('#chips').querySelectorAll('.chip').forEach((c) => { c.disabled = si; });
+  objetivoEnergia = si ? 0.95 : 0.12;
+  if (si) decirHint('Pensando…');
 }
 
 async function enviarVoz(){
@@ -396,41 +902,45 @@ async function enviarVoz(){
   grabadora = null;
   const cuerpo = new FormData();
   cuerpo.append('audio', new Blob(trozos, {type:tipo}), 'turno.' + extension(tipo));
-  await mandar('/api/turno', {method:'POST', body:cuerpo});
+  await mandar('/api/turno', {method:'POST', body:cuerpo}, false);
 }
 
 async function enviarTexto(texto){
-  if ($('#hablar').disabled) return;
-  decir('mio', texto);
-  pensando(true);
+  if (ocupado) return;
+  agregarTurno('mio', texto);
+  trabajando(true);
   await mandar('/api/mensaje', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({texto})
-  }, /*yaDicho=*/true);
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({texto}),
+  }, true);
 }
 
-async function mandar(url, opciones, yaDicho){
+async function mandar(url, opciones, yaMostrado){
   try{
     const r = await fetch(url, opciones);
     const d = await r.json();
+
     if (!r.ok){
-      fallar('NO TE ENTENDÍ · INTENTA DE NUEVO',
-        (d.error || r.status) + ' · ' + (d.detalle || ''));
+      fallar('No te entendí. Inténtalo otra vez.',
+        'HTTP ' + r.status + ' · ' + (d.error || '') + ' ' + (d.detalle || ''));
       return;
     }
-    if (!yaDicho) decir('mio', d.transcripcion);
-    decir('coach', d.respuesta);
+    if (!yaMostrado) agregarTurno('mio', d.transcripcion);
+    agregarTurno('coach', d.respuesta);
+    decirHint(hintPorDefecto());
+
     if (d.herramientas?.length) anotar('herramientas: ' + d.herramientas.join(', '));
     if (d.plan_version) anotar('plan v' + d.plan_version);
     if (d.motivo_cambio) anotar('motivo: ' + d.motivo_cambio);
-    anotar(`respuesta ${d.latencia_ms.total} ms · voz→texto ${d.latencia_ms.transcripcion} · coach ${d.latencia_ms.coach}`);
-    ponerEstado('LISTO');
-    cargarPlan();
+    anotar(`turno ${d.latencia_ms.total} ms · voz→texto ${d.latencia_ms.transcripcion} · coach ${d.latencia_ms.coach}`);
+
+    cargar();
     if (d.turno_id) reproducir(d.turno_id);
   }catch(err){
-    fallar('SE CORTÓ LA CONEXIÓN', 'fetch falló: ' + err.message);
+    fallar('Se cortó la conexión.', 'fetch falló: ' + err.message);
   }finally{
-    pensando(false);
+    trabajando(false);
   }
 }
 
@@ -438,83 +948,495 @@ async function reproducir(id){
   const t0 = performance.now();
   try{
     // fetch en vez de dejarle la descarga al <audio>: los móviles frenan la
-    // precarga de medios y eso son segundos de espera.
+    // precarga de medios y eso son segundos de silencio.
     const r = await fetch('/api/voz/' + id);
     if (!r.ok) return;
     reproductor.src = URL.createObjectURL(await r.blob());
-    reproductor.onended = () => ponerEstado('LISTO');
+    reproductor.onplay = () => { objetivoEnergia = 0.75; };
+    reproductor.onended = () => { objetivoEnergia = 0.12; decirHint(hintPorDefecto()); };
     await reproductor.play();
-    ponerEstado('HABLANDO…');
-    anotar(`voz suena a los ${Math.round(performance.now()-t0)} ms`);
+    decirHint('Hablando…');
+    anotar(`voz suena a los ${Math.round(performance.now() - t0)} ms`);
   }catch(err){ anotar('no se pudo reproducir: ' + err.message); }
+}
+
+function agregarTurno(quien, texto){
+  if (!texto) return;
+  turnos = [...turnos, {quien, texto}].slice(-3);
+  // column-reverse: el turno actual queda abajo, pegado a los controles.
+  $('#dialogo').innerHTML = [...turnos].reverse().map((t, i) =>
+    `<p class="turno n${i} ${t.quien}">${escapar(t.texto)}</p>`).join('');
+  // Con conversación en curso las sugerencias estorban más de lo que ayudan.
+  $('#sugerencias').style.display = turnos.length ? 'none' : 'flex';
 }
 
 const btn = $('#hablar');
 btn.addEventListener('mousedown', empezar);
 btn.addEventListener('mouseup', parar);
-btn.addEventListener('touchstart', e => {e.preventDefault(); empezar();});
-btn.addEventListener('touchend', e => {e.preventDefault(); parar();});
-
-const DIAS = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
-const NOMBRE = {facil:'Fácil', calidad:'Calidad', largo:'Largo'};
-// Construir la fecha desde el ISO evita el corrimiento de un día por zona horaria.
-const fechaLocal = (iso) => { const [a,m,d] = iso.split('-').map(Number); return new Date(a,m-1,d); };
-
-async function cargarPlan(){
-  let d;
-  try{ d = await (await fetch('/api/plan')).json(); }catch{ return; }
-
-  if (!d.hay_plan){
-    const vacio = `<p class="suave" style="margin-top:18px">Todavía no tienes plan.
-      Cuéntale al coach qué carrera quieres correr y te lo arma.</p>`;
-    $('#cuerpo-plan').innerHTML = vacio;
-    $('#cuerpo-agenda').innerHTML = vacio;
-    return;
+btn.addEventListener('mouseleave', () => { if (grabadora) parar(); });
+btn.addEventListener('touchstart', (e) => { e.preventDefault(); empezar(); });
+btn.addEventListener('touchend', (e) => { e.preventDefault(); parar(); });
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'INPUT'){
+    e.preventDefault(); empezar();
   }
+});
+addEventListener('keyup', (e) => { if (e.code === 'Space') parar(); });
 
-  pintarChips(CON_PLAN);
-  $('#cinta').textContent = `SEMANA ${d.semana_actual} DE ${d.semanas_totales}`;
-  $('#cinta-plan').textContent =
-    `${(d.objetivo || '').toUpperCase()}${d.fecha_carrera ? ' · ' + d.fecha_carrera : ''}`;
-  const tag = $('#tag-version');
-  tag.hidden = d.version < 2;
-  tag.textContent = 'v' + d.version;
-
-  const semana = d.semanas.find(s => s.numero === d.semana_actual) || d.semanas[0];
-  const pct = Math.round(d.semana_actual / d.semanas_totales * 100);
-
-  $('#cuerpo-plan').innerHTML = `
-    <div class="progreso">
-      <span class="eyebrow">SEMANA ${String(d.semana_actual).padStart(2,'0')} / ${d.semanas_totales}</span>
-      <span class="riel"><span style="width:${pct}%"></span></span>
-    </div>
-    ${d.motivo_cambio ? `<p class="suave" style="margin-bottom:16px">${d.motivo_cambio}</p>` : ''}
-    ${semana.sesiones.map(s => tarjeta(s, d.hoy)).join('')}
-    <div style="height:14px"></div>`;
-
-  $('#cuerpo-agenda').innerHTML = d.dias_para_carrera == null ? '' : `
-    <div class="tarjeta hoy" style="flex-direction:column;align-items:flex-start;gap:5px;padding:26px 22px;margin-top:18px">
-      <span class="cuenta">${d.dias_para_carrera}</span>
-      <span class="eyebrow">DÍAS</span>
-      <p class="titulo" style="margin-top:10px">${(d.objetivo || '').toUpperCase()}</p>
-      <span class="mono" style="font-size:13px;color:var(--texto-2)">${d.fecha_carrera}</span>
-    </div>`;
+/* ============================================================
+   Datos y pintado
+   ============================================================ */
+async function cargar(){
+  try{
+    const [plan, agenda] = await Promise.all([
+      fetch('/api/plan').then((r) => r.json()),
+      fetch('/api/carreras').then((r) => r.json()),
+    ]);
+    datos = plan;
+    carreras = agenda.carreras || [];
+  }catch(err){ anotar('no se pudo leer el plan: ' + err.message); return; }
+  pintar();
 }
 
-function tarjeta(s, hoy){
-  const f = fechaLocal(s.fecha);
-  return `<div class="tarjeta ${s.fecha === hoy ? 'hoy' : ''}">
-    <span class="barra ${s.tipo}"></span>
-    <span class="cuerpo">
-      <span class="dia mono">${DIAS[f.getDay()]} ${String(f.getDate()).padStart(2,'0')}</span>
-      <div class="tipo">${NOMBRE[s.tipo] || s.tipo}</div>
-      ${s.completada ? `<span class="hecha mono">HECHA${s.sensacion ? ' · ' + s.sensacion.toUpperCase() : ''}</span>` : ''}
-    </span>
-    <span class="km">${s.km}<span style="font-size:12px;color:var(--texto-3)"> km</span></span>
+function pintar(){
+  if (!datos) return;
+  pintarCabecera();
+  pintarPerfil();
+  pintarLateral();
+  if (vista === 'plan') pintarPlan();
+  if (vista === 'agenda') pintarAgenda();
+  if (vista === 'progreso') pintarProgreso();
+  if (!turnos.length){
+    decirHint(hintPorDefecto());
+    pintarChips(datos.hay_plan ? CON_PLAN : SIN_PLAN);
+  }
+}
+
+function pintarChips(lista){
+  $('#chips').innerHTML = lista.map((s) =>
+    `<button class="chip">${svg(s.i)}<span>${s.t}</span></button>`).join('');
+  $('#chips').querySelectorAll('.chip').forEach((b) => {
+    b.onclick = () => enviarTexto(b.querySelector('span').textContent);
+  });
+}
+
+function pintarCabecera(){
+  const h = new Date().getHours();
+  const saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  // El nombre lo aprende el coach en la conversación y lo guarda en el perfil.
+  // Mientras no lo sepa, el saludo va solo: inventarlo sería mentir.
+  $('#saludo').innerHTML = datos.nombre
+    ? `${saludo}, <b>${escapar(datos.nombre)}</b>`
+    : saludo;
+  $('#bajada').textContent = datos.hay_plan
+    ? 'Tu coach está aquí para ayudarte a mantener el ritmo.'
+    : 'Tu coach está aquí. Cuéntale qué quieres correr.';
+}
+
+function pintarPerfil(){
+  const t = datos.tablero;
+  const iniciales = (datos.nombre || '')
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
+
+  const pct = datos.hay_plan
+    ? Math.round(datos.semana_actual / datos.semanas_totales * 100) : 0;
+
+  $('#perfil').innerHTML = `
+    <div class="fila">
+      <div class="avatar">${iniciales || svg('corredor')}</div>
+      <div style="min-width:0">
+        <div class="quien">${escapar(datos.nombre || 'Tu perfil')}</div>
+        <div class="cual">${datos.nivel ? NOMBRE_NIVEL[datos.nivel] : 'Sin definir'}${
+          datos.objetivo ? ' · ' + NOMBRE_OBJETIVO[datos.objetivo] : ''}</div>
+      </div>
+    </div>
+    ${datos.hay_plan ? `
+      <div class="riel"><i style="width:${pct}%"></i></div>
+      <div class="pie">Semana ${datos.semana_actual} de ${datos.semanas_totales}
+        · ${t.racha} seguida${t.racha === 1 ? '' : 's'}</div>` : `
+      <div class="pie" style="margin-top:11px">Todavía no hay plan.</div>`}`;
+}
+
+function pintarLateral(){
+  const t = datos.tablero;
+
+  const racha = `
+    <div class="tarjeta">
+      <header>${svg('racha')}<span class="eyebrow">Racha actual</span></header>
+      <div class="cifra">${t.racha}</div>
+      <div class="leyenda">${t.racha === 1 ? 'sesión seguida' : 'sesiones seguidas'}</div>
+      <div class="semana">${t.semana.map((d) => `
+        <div><i class="punto ${d.estado}"></i><span>${d.inicial}</span></div>`).join('')}
+      </div>
+    </div>`;
+
+  const proxima = `
+    <div class="tarjeta">
+      <header>${svg('proxima')}<span class="eyebrow">Próximo entrenamiento</span></header>
+      ${t.proxima ? `
+        <div class="interna">
+          <div class="cuerpo">
+            <div class="que">${NOMBRE_TIPO[t.proxima.tipo] || t.proxima.tipo} ${t.proxima.km} K</div>
+            <div class="cuando">${t.proxima.cuando}</div>
+          </div>
+          <div class="icono-lima">${svg('corredor')}</div>
+        </div>` : `
+        <p class="vacio">${datos.hay_plan
+          ? 'No queda nada pendiente. Buen trabajo.'
+          : 'En cuanto tengas plan, aquí aparece lo que sigue.'}</p>`}
+    </div>`;
+
+  const semanal = `
+    <div class="tarjeta">
+      <header>${svg('semanal')}<span class="eyebrow">Progreso semanal</span></header>
+      <div class="cifra">${t.porcentaje}<small>%</small>
+        <span style="font-size:13px;color:var(--texto-2);font-weight:300"> completado</span></div>
+      <div class="barra"><i style="width:${t.porcentaje}%"></i></div>
+      <div class="leyenda" style="margin-top:9px">
+        ${t.km_hechos} de ${t.km_planeados} km esta semana</div>
+    </div>`;
+
+  const reciente = `
+    <div class="tarjeta">
+      <header>${svg('reciente')}<span class="eyebrow">Actividad reciente</span></header>
+      ${t.actividad.length ? `
+        <ul class="actividad">${t.actividad.map((h) => `
+          <li>
+            <div class="icono-lima">${svg('zapato')}</div>
+            <div class="cuerpo">
+              <div class="que">${NOMBRE_TIPO[h.tipo] || h.tipo} ${h.km} K</div>
+              <div class="cuando">${h.cuando}</div>
+            </div>
+            <div class="dato">${h.sensacion ? NOMBRE_SENSACION[h.sensacion] || h.sensacion : '—'}</div>
+          </li>`).join('')}
+        </ul>` : `
+        <p class="vacio">Cuéntale al coach cómo te fue en un entrenamiento y aparece aquí.</p>`}
+    </div>`;
+
+  $('#lateral').innerHTML = racha + proxima + semanal + reciente;
+}
+
+/* --- vistas de datos --- */
+const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+// Construir la fecha desde el ISO evita el corrimiento de un día por zona horaria.
+const fechaLocal = (iso) => { const [a,m,d] = iso.split('-').map(Number); return new Date(a, m-1, d); };
+
+const sinPlanAun = `<p class="vacio" style="padding-top:20px">
+  Todavía no hay plan. Cuéntale al coach qué carrera quieres correr y te lo arma.</p>`;
+
+function pintarPlan(){
+  if (!datos.hay_plan){ $('#v-plan').innerHTML = sinPlanAun; return; }
+  const semana = datos.semanas.find((s) => s.numero === datos.semana_actual) || datos.semanas[0];
+
+  $('#v-plan').innerHTML = `
+    <div class="encabezado-hoja">
+      <p class="eyebrow">Semana en curso${datos.version > 1 ? ` · plan v${datos.version}` : ''}</p>
+      <button class="boton riesgo" id="btn-borrar-plan">${svg('bote')} Borrar plan</button>
+    </div>
+    <div class="metricas">
+      ${dato('Semana', `${datos.semana_actual} / ${datos.semanas_totales}`)}
+      ${dato('Bloque', NOMBRE_BLOQUE[semana.bloque] || '—')}
+      ${dato('Volumen', semana.km_total + ' km')}
+    </div>
+    ${datos.motivo_cambio ? `<p class="vacio" style="margin:4px 0 14px">
+      ${escapar(datos.motivo_cambio)}</p>` : ''}
+    <div class="forma" id="forma-borrar">
+      <p class="titulo">¿Seguro que quieres borrar este plan?</p>
+      <p class="vacio" style="margin-top:7px">Se van las ${datos.semanas_totales} semanas
+        y todas sus versiones, incluido lo que ya reportaste. Esto no se puede deshacer.</p>
+      <div class="pie">
+        <button class="boton" data-cerrar="forma-borrar">Cancelar</button>
+        <button class="boton riesgo" id="confirmar-borrado">Sí, bórralo</button>
+      </div>
+    </div>
+    ${semana.sesiones.map((s, i) => filaSesion(s, datos.hoy, 'p' + i)).join('')}
+    <div style="height:10px"></div>`;
+
+  $('#btn-borrar-plan').onclick = () => $('#forma-borrar').classList.add('abierta');
+  $('#confirmar-borrado').onclick = borrarPlan;
+  conectarSesiones('#v-plan');
+}
+
+async function borrarPlan(){
+  try{
+    const r = await fetch('/api/plan', {method:'DELETE'});
+    const d = await r.json();
+    anotar('plan borrado, versiones: ' + d.borradas);
+    turnos = [];                 // el diálogo hablaba de un plan que ya no existe
+    $('#dialogo').innerHTML = '';
+    await cargar();
+    irA('coach');
+  }catch(err){ anotar('no se pudo borrar el plan: ' + err.message); }
+}
+
+function dato(etiqueta, valor){
+  return `<div class="tarjeta" style="padding:13px 14px">
+    <div class="eyebrow">${etiqueta}</div>
+    <div style="font-size:17px;margin-top:6px;text-transform:capitalize">${valor}</div>
   </div>`;
 }
 
-cargarPlan();
+function filaSesion(s, hoy, id){
+  const f = fechaLocal(s.fecha);
+  const r = s.receta;
+  return `<div class="sesion ${s.fecha === hoy ? 'hoy' : ''}" data-abre="${id}">
+    <i class="tira ${s.tipo}"></i>
+    <div class="cuerpo">
+      <div class="eyebrow">${DIAS[f.getDay()]} ${String(f.getDate()).padStart(2,'0')}</div>
+      <div class="tipo">${NOMBRE_TIPO[s.tipo] || s.tipo}</div>
+      ${r ? `<div class="cuando" style="font-size:12.5px;color:var(--texto-3);margin-top:3px">${escapar(r.resumen)}</div>` : ''}
+      ${s.completada ? `<span class="hecha">HECHA${
+        s.sensacion ? ' · ' + (NOMBRE_SENSACION[s.sensacion] || s.sensacion).toUpperCase() : ''}</span>` : ''}
+    </div>
+    <div class="km">${s.km}<small> km</small></div>
+    ${r ? `<span class="abrir">${svg('abajo')}</span>` : ''}
+  </div>
+  ${r ? `<div class="receta" id="${id}">
+    ${r.tramos.map((t) => `
+      <div class="tramo">
+        <span class="km">${t.km} km</span>
+        <div>
+          <div class="titulo">${escapar(t.titulo)}</div>
+          <div class="detalle">${escapar(t.detalle)}</div>
+        </div>
+      </div>`).join('')}
+    <div class="esfuerzo">${svg('pulso')}<span>${escapar(r.esfuerzo)}</span></div>
+    <p class="porque">${escapar(r.porque)}</p>
+  </div>` : ''}`;
+}
+
+/* Desplegable en vez de una pantalla aparte: lo que quieres saber antes de
+   salir a correr son cuatro líneas, no una navegación. */
+function conectarSesiones(dentro){
+  document.querySelectorAll(`${dentro} .sesion[data-abre]`).forEach((fila) => {
+    fila.onclick = () => {
+      const receta = document.getElementById(fila.dataset.abre);
+      if (!receta) return;
+      fila.classList.toggle('abierta');
+      receta.classList.toggle('abierta');
+    };
+  });
+}
+
+/* ---------- Agenda: calendario ---------- */
+const MESES_LARGOS = ['enero','febrero','marzo','abril','mayo','junio','julio',
+  'agosto','septiembre','octubre','noviembre','diciembre'];
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+function pintarAgenda(){
+  const hoy = fechaLocal(datos.hoy);
+  mesVisible = mesVisible || new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
+  const sesiones = datos.hay_plan ? datos.semanas.flatMap((s) => s.sesiones) : [];
+  const porDia = {};
+  sesiones.forEach((s) => { (porDia[s.fecha] = porDia[s.fecha] || []).push(s); });
+
+  const carrerasPorDia = {};
+  carreras.forEach((c) => { (carrerasPorDia[c.fecha] = carrerasPorDia[c.fecha] || []).push(c); });
+  // La carrera objetivo vive en el perfil, no en la agenda: se marca igual
+  // porque para quien mira el calendario es una fecha más de carrera.
+  if (datos.fecha_carrera) carrerasPorDia[datos.fecha_carrera] = carrerasPorDia[datos.fecha_carrera] || [];
+
+  $('#v-agenda').innerHTML = `
+    <div class="cal-cabeza">
+      <span class="cal-mes">${MESES_LARGOS[mesVisible.getMonth()]} ${mesVisible.getFullYear()}</span>
+      <div class="cal-nav">
+        <button id="mes-antes" aria-label="Mes anterior">${svg('izq')}</button>
+        <button id="mes-hoy" style="width:auto;padding:0 12px;font-size:12px">Hoy</button>
+        <button id="mes-despues" aria-label="Mes siguiente">${svg('der')}</button>
+      </div>
+    </div>
+    <div class="cal-rejilla">
+      ${['L','M','M','J','V','S','D'].map((d) => `<div class="cabecera-dia">${d}</div>`).join('')}
+      ${celdas(mesVisible, datos.hoy, porDia, carrerasPorDia)}
+    </div>
+
+    <div class="forma" id="forma-carrera">
+      <p class="titulo" id="forma-titulo">Nueva carrera</p>
+      <div class="campos">
+        <input id="c-nombre" placeholder="Nombre de la carrera" maxlength="80" autocomplete="off">
+        <input id="c-distancia" placeholder="10k, 21k, maratón…" maxlength="20" autocomplete="off">
+      </div>
+      <textarea id="c-nota" rows="2" placeholder="Notas: meta de tiempo, con quién vas, lo que quieras" maxlength="200"></textarea>
+      <p class="aviso" id="c-aviso"></p>
+      <div class="pie">
+        <button class="boton" data-cerrar="forma-carrera">Cancelar</button>
+        <button class="boton principal" id="c-guardar">Apuntar</button>
+      </div>
+    </div>
+
+    <div class="encabezado-hoja" style="margin-top:20px">
+      <p class="eyebrow">Tus carreras</p>
+      <button class="boton" id="btn-nueva">${svg('mas')} Agregar</button>
+    </div>
+    ${listaDeCarreras(datos.hoy)}`;
+
+  $('#mes-antes').onclick = () => { mover(-1); };
+  $('#mes-despues').onclick = () => { mover(1); };
+  $('#mes-hoy').onclick = () => { mesVisible = new Date(hoy.getFullYear(), hoy.getMonth(), 1); pintarAgenda(); };
+  $('#btn-nueva').onclick = () => abrirForma(datos.hoy);
+  $('#c-guardar').onclick = guardarCarrera;
+
+  document.querySelectorAll('#v-agenda .dia[data-fecha]').forEach((d) => {
+    d.onclick = () => abrirForma(d.dataset.fecha);
+  });
+  document.querySelectorAll('#v-agenda .quitar').forEach((b) => {
+    b.onclick = () => quitarCarrera(Number(b.dataset.id));
+  });
+  document.querySelectorAll('#v-agenda [data-cerrar]').forEach((b) => {
+    b.onclick = () => $('#' + b.dataset.cerrar).classList.remove('abierta');
+  });
+}
+
+function mover(meses){
+  mesVisible = new Date(mesVisible.getFullYear(), mesVisible.getMonth() + meses, 1);
+  pintarAgenda();
+}
+
+function celdas(mes, hoy, porDia, carrerasPorDia){
+  const primero = new Date(mes.getFullYear(), mes.getMonth(), 1);
+  // La semana arranca en lunes: getDay() da 0 para domingo, de ahí el ajuste.
+  const desplazamiento = (primero.getDay() + 6) % 7;
+  const arranque = new Date(primero);
+  arranque.setDate(1 - desplazamiento);
+
+  let html = '';
+  for (let i = 0; i < 42; i++){
+    const d = new Date(arranque);
+    d.setDate(arranque.getDate() + i);
+    const clave = iso(d);
+    const fuera = d.getMonth() !== mes.getMonth();
+    const hayCarrera = clave in carrerasPorDia;
+
+    const marcas = (porDia[clave] || []).map((s) => `<i class="${s.tipo}"></i>`).join('')
+      + (hayCarrera ? '<i class="bandera"></i>' : '');
+
+    html += `<button class="dia ${fuera ? 'fuera' : ''} ${clave === hoy ? 'hoy' : ''} ${hayCarrera ? 'carrera' : ''}"
+      data-fecha="${clave}" title="${clave}">
+      <span>${d.getDate()}</span>
+      <span class="marcas">${marcas}</span>
+    </button>`;
+  }
+  return html;
+}
+
+function listaDeCarreras(hoy){
+  const propias = carreras.map((c) => ({...c, objetivo:false}));
+  // La del perfil se muestra aunque no esté en la tabla: es la que se entrena.
+  if (datos.fecha_carrera && !carreras.some((c) => c.fecha === datos.fecha_carrera)){
+    propias.push({
+      id:null, objetivo:true, fecha:datos.fecha_carrera,
+      nombre:'Tu carrera objetivo', distancia:datos.objetivo, nota:'',
+    });
+  }
+
+  const proximas = propias.filter((c) => c.fecha >= hoy).sort((a,b) => a.fecha < b.fecha ? -1 : 1);
+  if (!proximas.length){
+    return `<p class="vacio">No tienes carreras apuntadas. Toca un día del calendario
+      para agregar una, o dísela al coach hablando: él la apunta.</p>`;
+  }
+
+  const dias = (f) => Math.round((fechaLocal(f) - fechaLocal(hoy)) / 86400000);
+  return proximas.map((c) => `
+    <div class="carrera-fila ${c.objetivo ? 'objetivo' : ''}">
+      <div class="icono-lima">${svg('bandera')}</div>
+      <div class="cuerpo">
+        <div class="nombre">${escapar(c.nombre)}${
+          c.distancia ? ` · ${escapar(NOMBRE_OBJETIVO[c.distancia] || c.distancia)}` : ''}</div>
+        <div class="cuando">${textoFecha(c.fecha)}${c.nota ? ' · ' + escapar(c.nota) : ''}</div>
+      </div>
+      <span class="faltan">${dias(c.fecha) === 0 ? 'HOY' : dias(c.fecha) + ' d'}</span>
+      ${c.objetivo ? '' : `<button class="quitar" data-id="${c.id}" aria-label="Quitar">${svg('equis')}</button>`}
+    </div>`).join('');
+}
+
+function textoFecha(f){
+  const d = fechaLocal(f);
+  return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES_LARGOS[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+function abrirForma(fecha){
+  diaElegido = fecha;
+  $('#forma-titulo').textContent = 'Carrera del ' + textoFecha(fecha);
+  $('#c-aviso').classList.remove('on');
+  $('#forma-carrera').classList.add('abierta');
+  $('#c-nombre').focus();
+}
+
+async function guardarCarrera(){
+  const nombre = $('#c-nombre').value.trim();
+  if (!nombre){
+    $('#c-aviso').textContent = 'Ponle un nombre para poder reconocerla.';
+    $('#c-aviso').classList.add('on');
+    return;
+  }
+  try{
+    const r = await fetch('/api/carreras', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        nombre, fecha:diaElegido,
+        distancia:$('#c-distancia').value.trim() || null,
+        nota:$('#c-nota').value.trim(),
+      }),
+    });
+    if (!r.ok){
+      const d = await r.json();
+      $('#c-aviso').textContent = 'No se pudo apuntar: ' + (d.error || r.status);
+      $('#c-aviso').classList.add('on');
+      return;
+    }
+    anotar('carrera apuntada: ' + nombre + ' ' + diaElegido);
+    await cargar();
+  }catch(err){ anotar('no se pudo apuntar la carrera: ' + err.message); }
+}
+
+async function quitarCarrera(id){
+  try{
+    await fetch('/api/carreras/' + id, {method:'DELETE'});
+    await cargar();
+  }catch(err){ anotar('no se pudo quitar la carrera: ' + err.message); }
+}
+
+function pintarProgreso(){
+  if (!datos.hay_plan){ $('#v-progreso').innerHTML = sinPlanAun; return; }
+
+  const semanas = datos.semanas;
+  const tope = Math.max(...semanas.map((s) => s.km_total), 1);
+  const hechas = semanas.flatMap((s) => s.sesiones).filter((s) => s.completada);
+  const kmHechos = Math.round(hechas.reduce((a, s) => a + s.km, 0) * 10) / 10;
+  const totales = semanas.flatMap((s) => s.sesiones);
+  const adherencia = totales.filter((s) => s.fecha < datos.hoy).length
+    ? Math.round(hechas.length / totales.filter((s) => s.fecha < datos.hoy).length * 100)
+    : 0;
+
+  $('#v-progreso').innerHTML = `
+    <div class="metricas" style="margin-top:6px">
+      ${dato('Km acumulados', kmHechos)}
+      ${dato('Sesiones hechas', hechas.length)}
+      ${dato('Adherencia', adherencia + '%')}
+    </div>
+    <p class="eyebrow" style="margin-top:18px">Volumen por semana</p>
+    <div class="grafica">
+      ${semanas.map((s) => `
+        <div class="${s.numero === datos.semana_actual ? 'actual' : ''} ${s.es_descarga ? 'descarga' : ''}"
+             title="Semana ${s.numero}: ${s.km_total} km${s.es_descarga ? ' (descarga)' : ''}">
+          <i style="height:${Math.max(3, s.km_total / tope * 100)}%"></i>
+          <b>${s.numero}</b>
+        </div>`).join('')}
+    </div>
+    <p class="vacio">La barra rayada es una semana de descarga: bajar la carga a
+      propósito es parte del plan, no un hueco.</p>`;
+}
+
+/* ============================================================
+   Arranque
+   ============================================================ */
+irA('coach');
+medirCanvas();
+cargar();
+// El layout se asienta después de que cargan las fuentes; volver a medir evita
+// que el campo quede corrido en el primer pintado.
+document.fonts?.ready.then(medirCanvas);
 </script>
 </body>
 </html>

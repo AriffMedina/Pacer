@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from pacer.application.casos_uso.atender_telegram import atender_mensaje_de_telegram
 from pacer.application.casos_uso.atender_turno import atender_turno
 from pacer.application.contexto.bloque_estado import construir_bloque
+from pacer.application.contexto.fechas import interpretar_fecha
 from pacer.application.contexto.prompt_sistema import construir_prompt
 from pacer.composition_root import (
     configuracion,
@@ -33,10 +34,15 @@ from pacer.composition_root import (
     construir_telegram,
     construir_tts,
 )
+from pacer.domain.entidades.carrera import Carrera
 from pacer.domain.puertos.notificacion import MensajeEntrante
 from pacer.domain.puertos.voz import ErrorDeTranscripcion
+from pacer.domain.servicios.prescripcion import prescribir
+from pacer.domain.servicios.tablero import Tablero, resumir
+from pacer.infrastructure.persistencia.esquema import agregar_columnas_nuevas
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
+from pacer.infrastructure.persistencia.repositorio_carrera import RepositorioCarrera
 from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
 from pacer.interfaces.http.internas import router as router_interno
 from pacer.interfaces.worker.sondeo_telegram import sondear
@@ -72,6 +78,7 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
         async with app.state.fabrica() as bd:
             corredores = RepositorioCorredor(bd)
             corredor = await corredores.obtener_o_crear_piloto()
+            agenda = RepositorioCarrera(bd)
 
             # El coach retoma donde quedó, aunque el servidor se haya reiniciado.
             historial = await corredores.ultimos_turnos(corredor.id, TURNOS_RECORDADOS)
@@ -79,12 +86,15 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
 
             repositorio = RepositorioPlan(bd)
             plan_previo = await repositorio.version_activa(corredor.id)
+            # El bloque se arma SIEMPRE: aunque no haya plan, el corredor puede
+            # tener carreras apuntadas y el coach tiene que verlas.
             sistema = construir_prompt(
                 construir_bloque(
-                    plan_previo, hoy=hoy, fecha_carrera=corredor.perfil.fecha_carrera
+                    plan_previo,
+                    hoy=hoy,
+                    fecha_carrera=corredor.perfil.fecha_carrera,
+                    carreras=await agenda.todas(corredor.id),
                 )
-                if plan_previo and corredor.perfil.fecha_carrera
-                else None
             )
 
             resultado = await atender_turno(
@@ -96,6 +106,9 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
                 corredor_id=corredor.id,
                 hoy=hoy,
             )
+
+            for nueva in resultado.carreras_nuevas:
+                await agenda.agregar(corredor.id, nueva)
 
             await corredores.guardar_perfil(corredor.id, resultado.perfil)
             await corredores.recordar(corredor.id, "user", dicho, canal=canal)
@@ -184,6 +197,9 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
 
     async with motor.begin() as conexion:
         await conexion.run_sync(Base.metadata.create_all)
+        # create_all no toca las tablas que ya existen. Sin esto, una columna
+        # nueva rompe todas las consultas contra una base que ya tenía datos.
+        await conexion.run_sync(agregar_columnas_nuevas)
 
     app.state.fabrica = async_sessionmaker(motor, expire_on_commit=False)
     app.state.trazas = construir_observabilidad(config)
@@ -348,8 +364,27 @@ async def plan_actual() -> dict[str, Any]:
         plan = await RepositorioPlan(bd).version_activa(corredor.id)
 
     perfil = corredor.perfil
+    tablero = _tablero_json(resumir(plan, hoy=hoy))
+
     if plan is None:
-        return {"hay_plan": False, "objetivo": perfil.objetivo}
+        # El tablero viaja igual: la vista se dibuja desde el primer día, con
+        # las tarjetas vacías, y no con media pantalla en blanco.
+        return {
+            "hay_plan": False,
+            "nombre": perfil.nombre,
+            "objetivo": perfil.objetivo,
+            "nivel": perfil.nivel,
+            # `hoy` y la fecha objetivo viajan también sin plan: el calendario
+            # de la agenda se dibuja desde el primer día, con o sin entrenamiento.
+            "hoy": hoy.isoformat(),
+            "fecha_carrera": perfil.fecha_carrera.isoformat()
+            if perfil.fecha_carrera
+            else None,
+            "dias_para_carrera": (perfil.fecha_carrera - hoy).days
+            if perfil.fecha_carrera
+            else None,
+            "tablero": tablero,
+        }
 
     semana_actual = next(
         (
@@ -364,6 +399,9 @@ async def plan_actual() -> dict[str, Any]:
         "hay_plan": True,
         "version": plan.version,
         "motivo_cambio": plan.motivo_cambio,
+        "tablero": tablero,
+        "nombre": perfil.nombre,
+        "nivel": perfil.nivel,
         "objetivo": perfil.objetivo,
         "fecha_carrera": perfil.fecha_carrera.isoformat()
         if perfil.fecha_carrera
@@ -387,11 +425,135 @@ async def plan_actual() -> dict[str, Any]:
                         "km": ses.km,
                         "completada": ses.completada,
                         "sensacion": ses.sensacion,
+                        # Qué hacer exactamente. Lo calcula el dominio: "calidad
+                        # 8.8 km" no le dice nada a nadie.
+                        "receta": _receta_json(
+                            prescribir(ses, nivel=perfil.nivel, bloque=s.bloque)
+                        ),
                     }
                     for ses in s.sesiones
                 ],
             }
             for s in plan.semanas
+        ],
+    }
+
+
+@app.delete("/api/plan")
+async def borrar_plan() -> dict[str, Any]:
+    """Descarta el plan entero, con todas sus versiones.
+
+    Es distinto de ajustar: ajustar produce una v2 y archiva la anterior. Esto
+    es "ya no voy a esa carrera", y dejar el plan viejo colgando haría que el
+    coach siga recordando sesiones de algo que ya no existe.
+    """
+    async with app.state.fabrica() as bd:
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        borradas = await RepositorioPlan(bd).borrar_todo(corredor.id)
+
+    return {"borradas": borradas}
+
+
+@app.get("/api/carreras")
+async def carreras() -> dict[str, Any]:
+    async with app.state.fabrica() as bd:
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        apuntadas = await RepositorioCarrera(bd).todas(corredor.id)
+
+    return {"carreras": [_carrera_json(c) for c in apuntadas]}
+
+
+@app.post("/api/carreras")
+async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
+    """Apunta una carrera desde el calendario.
+
+    El coach la ve en el turno siguiente porque el bloque de estado se arma
+    leyendo esta misma tabla: agregar aquí y hablar allá no son dos mundos.
+    """
+    nombre = str(cuerpo.get("nombre", "")).strip()
+    fecha = interpretar_fecha(str(cuerpo.get("fecha", "")))
+
+    if not nombre:
+        return JSONResponse({"error": "falta_el_nombre"}, status_code=400)
+    if fecha is None:
+        return JSONResponse({"error": "fecha_no_entendida"}, status_code=400)
+
+    async with app.state.fabrica() as bd:
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        guardada = await RepositorioCarrera(bd).agregar(
+            corredor.id,
+            Carrera(
+                fecha=fecha,
+                nombre=nombre[:80],
+                distancia=(str(cuerpo["distancia"])[:20] if cuerpo.get("distancia") else None),
+                nota=str(cuerpo.get("nota") or "")[:200],
+            ),
+        )
+
+    return JSONResponse(_carrera_json(guardada))
+
+
+@app.delete("/api/carreras/{carrera_id}")
+async def quitar_carrera(carrera_id: int) -> JSONResponse:
+    async with app.state.fabrica() as bd:
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        existia = await RepositorioCarrera(bd).quitar(corredor.id, carrera_id)
+
+    if not existia:
+        return JSONResponse({"error": "no_existe"}, status_code=404)
+    return JSONResponse({"borrada": True})
+
+
+def _carrera_json(carrera: Carrera) -> dict[str, Any]:
+    return {
+        "id": carrera.id,
+        "fecha": carrera.fecha.isoformat(),
+        "nombre": carrera.nombre,
+        "distancia": carrera.distancia,
+        "nota": carrera.nota,
+    }
+
+
+def _receta_json(receta: Any) -> dict[str, Any]:
+    return {
+        "resumen": receta.resumen,
+        "esfuerzo": receta.esfuerzo,
+        "porque": receta.porque,
+        "tramos": [
+            {"titulo": t.titulo, "detalle": t.detalle, "km": t.km}
+            for t in receta.tramos
+        ],
+    }
+
+
+def _tablero_json(tablero: Tablero) -> dict[str, Any]:
+    """Serializa el resumen. Traduce, no calcula: los números ya venían hechos."""
+    return {
+        "racha": tablero.racha,
+        "semana": [
+            {"inicial": d.inicial, "fecha": d.fecha.isoformat(), "estado": d.estado}
+            for d in tablero.semana
+        ],
+        "proxima": {
+            "fecha": tablero.proxima.fecha.isoformat(),
+            "tipo": tablero.proxima.tipo,
+            "km": tablero.proxima.km,
+            "cuando": tablero.proxima.cuando,
+        }
+        if tablero.proxima
+        else None,
+        "km_hechos": tablero.km_hechos,
+        "km_planeados": tablero.km_planeados,
+        "porcentaje": tablero.porcentaje,
+        "actividad": [
+            {
+                "fecha": h.fecha.isoformat(),
+                "tipo": h.tipo,
+                "km": h.km,
+                "sensacion": h.sensacion,
+                "cuando": h.cuando,
+            }
+            for h in tablero.actividad
         ],
     }
 

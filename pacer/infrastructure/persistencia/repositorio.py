@@ -41,6 +41,27 @@ class RepositorioPlan:
         self._sesion.add(_a_orm(plan, corredor_id))
         await self._sesion.commit()
 
+    async def borrar_todo(self, corredor_id: int) -> int:
+        """Descarta el plan del corredor con todas sus versiones.
+
+        Distinto de ajustar: ajustar versiona y archiva. Esto es "ya no voy a
+        esa carrera". Se recorre y se borra fila por fila —en vez de un DELETE
+        masivo— para que el cascade se lleve semanas y sesiones con él.
+        """
+        filas = (
+            await self._sesion.execute(
+                select(PlanORM).where(PlanORM.corredor_id == corredor_id)
+            )
+        ).scalars()
+
+        borradas = 0
+        for fila in filas:
+            await self._sesion.delete(fila)
+            borradas += 1
+
+        await self._sesion.commit()
+        return borradas
+
     async def versiones(self, corredor_id: int) -> list[Plan]:
         consulta = (
             select(PlanORM)
@@ -70,6 +91,8 @@ def _a_orm(plan: Plan, corredor_id: int) -> PlanORM:
             SemanaORM(
                 numero=semana.numero,
                 es_descarga=semana.es_descarga,
+                bloque=semana.bloque,
+                recortada=semana.recortada,
                 sesiones=[
                     SesionORM(
                         fecha=sesion.fecha,
@@ -94,6 +117,10 @@ def _a_dominio(fila: PlanORM) -> Plan:
             Semana(
                 numero=semana.numero,
                 es_descarga=semana.es_descarga,
+                # Las filas escritas antes de que existiera la columna vuelven
+                # con NULL: el dominio espera los valores por defecto, no None.
+                bloque=semana.bloque or "",
+                recortada=bool(semana.recortada),
                 sesiones=tuple(
                     Sesion(
                         fecha=sesion.fecha,

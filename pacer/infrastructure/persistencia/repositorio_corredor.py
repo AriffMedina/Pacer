@@ -10,6 +10,7 @@ from pacer.domain.entidades.perfil import Nivel, Objetivo, Perfil
 from pacer.infrastructure.persistencia.modelos import ConversacionORM, CorredorORM
 
 CAMPOS_DE_PERFIL = (
+    "nombre",
     "objetivo",
     "nivel",
     "dias_disponibles",
@@ -115,6 +116,7 @@ def _a_dominio(fila: CorredorORM) -> Corredor:
         email=fila.email,
         password_hash=fila.password_hash,
         perfil=Perfil(
+            nombre=fila.nombre,
             objetivo=cast(Objetivo | None, fila.objetivo),
             nivel=cast(Nivel | None, fila.nivel),
             dias_disponibles=fila.dias_disponibles,

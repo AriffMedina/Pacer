@@ -15,6 +15,11 @@ from pydantic import BaseModel, Field
 class ActualizarPerfil(BaseModel):
     """Úsala en cuanto el corredor mencione cualquiera de estos datos."""
 
+    nombre: str | None = Field(
+        None,
+        max_length=40,
+        description="Cómo se llama o cómo quiere que le digan. Solo el nombre.",
+    )
     objetivo: Literal["5k", "10k", "21k", "maraton"] | None = None
     nivel: Literal["nuevo", "principiante", "intermedio", "avanzado"] | None = None
     dias_disponibles: int | None = Field(None, ge=2, le=6)
@@ -47,10 +52,35 @@ class GenerarPlan(BaseModel):
     """Úsala solo cuando el perfil esté completo. Si falta algo, pregunta."""
 
 
+class ApuntarCarrera(BaseModel):
+    """Úsala cuando el corredor mencione una carrera con fecha que va a correr.
+
+    Sirve para cualquier carrera de su calendario, no solo la que entrena. Si
+    además quiere entrenar PARA ella, llama también a actualizar_perfil.
+    """
+
+    nombre: str = Field(
+        max_length=80, description="Cómo la llama el corredor. Por ejemplo: Maratón CDMX"
+    )
+    fecha: str = Field(
+        description=(
+            "Fecha en formato ISO AAAA-MM-DD. Si no dijo el año, pregúntaselo "
+            "antes de llamar esta herramienta."
+        )
+    )
+    distancia: str | None = Field(
+        None, max_length=20, description="Por ejemplo: 5k, 10k, 21k, maraton, 15k"
+    )
+    nota: str | None = Field(
+        None, max_length=200, description="Lo que el corredor quiera recordar de ella."
+    )
+
+
 HERRAMIENTAS: dict[str, type[BaseModel]] = {
     "actualizar_perfil": ActualizarPerfil,
     "registrar_sesion": RegistrarSesion,
     "generar_plan": GenerarPlan,
+    "apuntar_carrera": ApuntarCarrera,
 }
 
 
