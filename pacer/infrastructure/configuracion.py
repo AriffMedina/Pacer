@@ -24,7 +24,11 @@ class Configuracion(BaseSettings):
     telegram_bot_token: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
+    # Langfuse Cloud entrega LANGFUSE_BASE_URL; el SDK histórico usa
+    # LANGFUSE_HOST. Se aceptan las dos para que copiar y pegar desde la
+    # consola de Langfuse no falle en silencio.
     langfuse_host: str = "http://localhost:3000"
+    langfuse_base_url: str = ""
 
     @property
     def es_postgres(self) -> bool:
@@ -38,3 +42,12 @@ class Configuracion(BaseSettings):
     @property
     def telegram_disponible(self) -> bool:
         return bool(self.telegram_bot_token)
+
+    @property
+    def langfuse_url(self) -> str:
+        """La URL efectiva: gana `LANGFUSE_BASE_URL` si está puesta."""
+        return self.langfuse_base_url or self.langfuse_host
+
+    @property
+    def observabilidad_disponible(self) -> bool:
+        return bool(self.langfuse_public_key and self.langfuse_secret_key)
