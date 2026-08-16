@@ -60,6 +60,26 @@ class ConversacionORM(Base):
     creado_en: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
+class RecordatorioORM(Base):
+    """Lo que el coach tiene pendiente preguntarte.
+
+    `clave` es UNIQUE: materializar dos veces no duplica, y confirmar dos veces
+    no reenvía. Los reintentos de n8n son seguros por construcción de la base,
+    no por el cuidado de quien llama.
+    """
+
+    __tablename__ = "recordatorio"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    corredor_id: Mapped[int] = mapped_column(ForeignKey("corredor.id"), index=True)
+    clave: Mapped[str] = mapped_column(unique=True, index=True)
+    texto: Mapped[str]
+    programado_para: Mapped[datetime] = mapped_column(index=True)
+    canal: Mapped[str] = mapped_column(default="telegram")
+    enviado_en: Mapped[datetime | None] = mapped_column(default=None)
+    id_mensaje_proveedor: Mapped[str | None] = mapped_column(default=None)
+
+
 class PlanORM(Base):
     __tablename__ = "plan"
 

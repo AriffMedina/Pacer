@@ -44,6 +44,26 @@ services:
     ports:
       - "8000:8000"
 
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "5678:5678"
+    environment:
+      GENERIC_TIMEZONE: America/Merida
+      TZ: America/Merida
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      # Dentro de la red del compose el backend es `app`, no localhost. El
+      # token va en las credenciales de n8n, nunca en el JSON del workflow.
+      PACER_API: http://app:8000
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # Los workflows viven en el repo, no solo dentro de la instancia:
+      #   n8n export:workflow --separate --output=/workflows
+      - ../n8n/workflows:/workflows
+
   langfuse:
     image: langfuse/langfuse:2
     profiles: ["observabilidad-local"]
@@ -61,3 +81,4 @@ services:
 
 volumes:
   postgres_data:
+  n8n_data:

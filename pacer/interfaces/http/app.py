@@ -38,6 +38,7 @@ from pacer.domain.puertos.voz import ErrorDeTranscripcion
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
+from pacer.interfaces.http.internas import router as router_interno
 from pacer.interfaces.worker.sondeo_telegram import sondear
 
 DIRECTORIO_WEB = Path(__file__).resolve().parents[3] / "web"
@@ -172,6 +173,7 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
 
 
 app = FastAPI(title="Pacer", lifespan=ciclo_de_vida)
+app.include_router(router_interno)
 
 
 @app.post("/api/turno")
