@@ -1,16 +1,11 @@
 """El turno completo contra una base real: conversación entra, filas salen."""
 
-from collections.abc import AsyncIterator
 from datetime import date
 from typing import Any
-
-import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from pacer.application.casos_uso.atender_turno import atender_turno
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import LlamadaHerramienta, RespuestaLLM
-from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 
 CORREDOR = 1
@@ -23,17 +18,6 @@ PERFIL = Perfil(
     km_semana=25,
     fecha_carrera=date(2026, 11, 1),
 )
-
-
-@pytest.fixture
-async def repositorio() -> AsyncIterator[RepositorioPlan]:
-    motor = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with motor.begin() as conexion:
-        await conexion.run_sync(Base.metadata.create_all)
-    fabrica = async_sessionmaker(motor, expire_on_commit=False)
-    async with fabrica() as sesion:
-        yield RepositorioPlan(sesion)
-    await motor.dispose()
 
 
 class LLMFalso:

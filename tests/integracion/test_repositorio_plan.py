@@ -1,29 +1,13 @@
-from collections.abc import AsyncIterator
 from datetime import date
 
-import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from pacer.domain.entidades.plan import Sesion
 from pacer.domain.servicios.ajustador import ajustar
 from pacer.domain.servicios.generador_plan import generar_plan
-from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 
 CORREDOR = 1
-
-
-@pytest.fixture
-async def sesion_bd() -> AsyncIterator[AsyncSession]:
-    motor = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with motor.begin() as conexion:
-        await conexion.run_sync(Base.metadata.create_all)
-
-    fabrica = async_sessionmaker(motor, expire_on_commit=False)
-    async with fabrica() as sesion:
-        yield sesion
-
-    await motor.dispose()
 
 
 def plan_nuevo():
