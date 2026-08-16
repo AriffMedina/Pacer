@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
+from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
 
 SQLITE_EN_MEMORIA = "sqlite+aiosqlite:///:memory:"
 URL_DE_PRUEBAS = os.environ.get("TEST_DATABASE_URL", SQLITE_EN_MEMORIA)
@@ -47,3 +48,8 @@ async def sesion_bd() -> AsyncIterator[AsyncSession]:
 @pytest.fixture
 async def repositorio(sesion_bd: AsyncSession) -> RepositorioPlan:
     return RepositorioPlan(sesion_bd)
+
+
+@pytest.fixture
+async def corredores(sesion_bd: AsyncSession) -> RepositorioCorredor:
+    return RepositorioCorredor(sesion_bd)

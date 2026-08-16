@@ -4,7 +4,7 @@ El dominio no sabe que esto existe. El repositorio traduce entre ambos mundos,
 y `import-linter` es quien vigila que esa frontera no se cruce.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -12,6 +12,52 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+class CorredorORM(Base):
+    """Identidad y perfil.
+
+    `email` y `password_hash` nacen vacíos a propósito: el piloto identifica por
+    canal, no por credenciales. Existir desde hoy evita migrar el esquema el día
+    que se agregue login.
+    """
+
+    __tablename__ = "corredor"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_chat_id: Mapped[int | None] = mapped_column(
+        unique=True, index=True, default=None
+    )
+    email: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
+    password_hash: Mapped[str | None] = mapped_column(default=None)
+
+    # Perfil. Son hechos del corredor, no conversación, así que son columnas.
+    objetivo: Mapped[str | None] = mapped_column(default=None)
+    nivel: Mapped[str | None] = mapped_column(default=None)
+    dias_disponibles: Mapped[int | None] = mapped_column(default=None)
+    km_semana: Mapped[int | None] = mapped_column(default=None)
+    fecha_carrera: Mapped[date | None] = mapped_column(default=None)
+    dolor_actual: Mapped[bool] = mapped_column(default=False)
+
+
+class ConversacionORM(Base):
+    """Turnos anteriores, para que el coach retome después de un reinicio.
+
+    Los hechos viven en sus propias tablas; esto es continuidad de trato, no
+    fuente de verdad. Si se perdiera, el coach seguiría sabiendo quién eres y
+    en qué semana vas.
+    """
+
+    __tablename__ = "conversacion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    corredor_id: Mapped[int] = mapped_column(
+        ForeignKey("corredor.id"), index=True
+    )
+    rol: Mapped[str]
+    texto: Mapped[str]
+    canal: Mapped[str] = mapped_column(default="web")
+    creado_en: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
 class PlanORM(Base):

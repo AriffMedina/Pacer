@@ -11,7 +11,6 @@ import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,7 +26,6 @@ from pacer.application.casos_uso.atender_turno import atender_turno
 from pacer.application.contexto.bloque_estado import construir_bloque
 from pacer.application.contexto.prompt_sistema import construir_prompt
 from pacer.composition_root import (
-    CORREDOR_PILOTO,
     configuracion,
     construir_llm,
     construir_observabilidad,
@@ -35,11 +33,11 @@ from pacer.composition_root import (
     construir_telegram,
     construir_tts,
 )
-from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.notificacion import MensajeEntrante
 from pacer.domain.puertos.voz import ErrorDeTranscripcion
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
+from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
 from pacer.interfaces.worker.sondeo_telegram import sondear
 
 DIRECTORIO_WEB = Path(__file__).resolve().parents[3] / "web"
@@ -47,20 +45,10 @@ DIRECTORIO_WEB = Path(__file__).resolve().parents[3] / "web"
 registro = logging.getLogger("pacer")
 
 
-@dataclass
-class SesionEnMemoria:
-    """Perfil e historial del piloto.
-
-    Limitación conocida: se pierde al reiniciar. El plan sí está en la base;
-    persistir el perfil es lo que falta para que Telegram funcione con la app
-    cerrada durante días.
-    """
-
-    perfil: Perfil = field(default_factory=Perfil)
-    mensajes: list[dict[str, Any]] = field(default_factory=list)
-
-
-sesion = SesionEnMemoria()
+# Cuántos turnos anteriores se le recuerdan al modelo. No hace falta más: los
+# hechos —perfil, plan, sesiones— viven en tablas y entran por el bloque de
+# estado. Esto es continuidad de trato, no fuente de verdad.
+TURNOS_RECORDADOS = 12
 
 # Respuestas esperando ser sintetizadas. Se guardan pocas y se descartan las
 # viejas: nadie pide la voz de un turno de hace veinte turnos.
@@ -147,18 +135,38 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
 
     async def atender(mensaje: MensajeEntrante) -> None:
         async with app.state.fabrica() as bd:
-            await atender_mensaje_de_telegram(
+            corredores = RepositorioCorredor(bd)
+            corredor = await corredores.obtener_o_crear_piloto()
+            await corredores.vincular_telegram(corredor.id, mensaje.chat_id)
+
+            historial = await corredores.ultimos_turnos(
+                corredor.id, TURNOS_RECORDADOS
+            )
+
+            resultado = await atender_mensaje_de_telegram(
                 mensaje,
                 llm=app.state.llm,
                 stt=app.state.stt,
                 canal=canal,
                 repositorio=RepositorioPlan(bd),
                 sistema=construir_prompt(),
-                historial=sesion.mensajes,
-                perfil=sesion.perfil,
-                corredor_id=CORREDOR_PILOTO,
+                historial=historial,
+                perfil=corredor.perfil,
+                corredor_id=corredor.id,
                 hoy=datetime.now(UTC).date(),
             )
+
+            if resultado.atendido:
+                await corredores.guardar_perfil(corredor.id, resultado.perfil)
+                await corredores.recordar(
+                    corredor.id,
+                    "user",
+                    resultado.dicho_por_el_corredor,
+                    canal="telegram",
+                )
+                await corredores.recordar(
+                    corredor.id, "assistant", resultado.respuesta, canal="telegram"
+                )
 
     return asyncio.create_task(sondear(canal, atender))
 
@@ -203,25 +211,32 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
     ms_stt = int((time.perf_counter() - arranque) * 1000)
     hoy = datetime.now(UTC).date()
 
-    sesion.mensajes.append(
-        {"role": "user", "content": [{"text": transcripcion.texto}]}
-    )
-
     # La traza del turno envuelve todo: las llamadas al modelo cuelgan de ella,
     # así en Langfuse se ve una conversación y no llamadas sueltas.
     with app.state.trazas.observar(
         nombre="turno_hablado",
         entrada={"transcripcion": transcripcion.texto},
-        metadatos={"corredor": CORREDOR_PILOTO, "ms_transcripcion": ms_stt},
+        metadatos={"ms_transcripcion": ms_stt},
     ) as traza:
         async with app.state.fabrica() as bd:
+            corredores = RepositorioCorredor(bd)
+            corredor = await corredores.obtener_o_crear_piloto()
+
+            # El coach retoma donde quedó, aunque el servidor se haya reiniciado.
+            historial = await corredores.ultimos_turnos(
+                corredor.id, TURNOS_RECORDADOS
+            )
+            historial.append(
+                {"role": "user", "content": [{"text": transcripcion.texto}]}
+            )
+
             repositorio = RepositorioPlan(bd)
-            plan_previo = await repositorio.version_activa(CORREDOR_PILOTO)
+            plan_previo = await repositorio.version_activa(corredor.id)
             sistema = construir_prompt(
                 construir_bloque(
-                    plan_previo, hoy=hoy, fecha_carrera=sesion.perfil.fecha_carrera
+                    plan_previo, hoy=hoy, fecha_carrera=corredor.perfil.fecha_carrera
                 )
-                if plan_previo and sesion.perfil.fecha_carrera
+                if plan_previo and corredor.perfil.fecha_carrera
                 else None
             )
 
@@ -229,10 +244,18 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
                 llm=app.state.llm,
                 repositorio=repositorio,
                 sistema=sistema,
-                mensajes=sesion.mensajes,
-                perfil=sesion.perfil,
-                corredor_id=CORREDOR_PILOTO,
+                mensajes=historial,
+                perfil=corredor.perfil,
+                corredor_id=corredor.id,
                 hoy=hoy,
+            )
+
+            await corredores.guardar_perfil(corredor.id, resultado.perfil)
+            await corredores.recordar(
+                corredor.id, "user", transcripcion.texto, canal="web"
+            )
+            await corredores.recordar(
+                corredor.id, "assistant", resultado.texto, canal="web"
             )
 
         traza.registrar_salida(
@@ -246,12 +269,6 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
         )
 
     ms_total = int((time.perf_counter() - arranque) * 1000)
-
-    sesion.perfil = resultado.perfil
-    sesion.mensajes = resultado.mensajes
-    sesion.mensajes.append(
-        {"role": "assistant", "content": [{"text": resultado.texto or "..."}]}
-    )
 
     # La voz NO se sintetiza aquí. El texto se devuelve en cuanto está y el
     # audio se pide aparte: así el usuario lee la respuesta segundos antes de
