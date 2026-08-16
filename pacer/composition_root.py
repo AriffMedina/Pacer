@@ -4,9 +4,10 @@ Cambiar de familia de modelos es cambiar `MODEL_ID` y nada más: ese es el
 argumento entero del ADR-003.
 """
 
+from pacer.infrastructure.configuracion import Configuracion
 from pacer.infrastructure.llm.bedrock import AdaptadorBedrock
-
-REGION = "us-east-1"
+from pacer.infrastructure.stt.groq_whisper import AdaptadorGroqWhisper
+from pacer.infrastructure.tts.polly import AdaptadorPolly
 
 # Amazon acepta el id directo.
 MODEL_ID_NOVA = "amazon.nova-lite-v1:0"
@@ -25,6 +26,27 @@ MODEL_ID = MODEL_ID_CLAUDE
 VOZ_TTS = "Mia"
 MOTOR_TTS = "generative"
 
+# El piloto es de un solo corredor (`vision.md`: multiusuario fuera de alcance).
+CORREDOR_PILOTO = 1
 
-def construir_llm() -> AdaptadorBedrock:
-    return AdaptadorBedrock(model_id=MODEL_ID, region=REGION)
+
+def configuracion() -> Configuracion:
+    return Configuracion()
+
+
+def construir_llm(config: Configuracion | None = None) -> AdaptadorBedrock:
+    conf = config or configuracion()
+    return AdaptadorBedrock(model_id=MODEL_ID, region=conf.aws_region)
+
+
+def construir_stt(config: Configuracion | None = None) -> AdaptadorGroqWhisper | None:
+    """Sin llave de Groq no hay transcripción, pero el resto del sistema vive."""
+    conf = config or configuracion()
+    if not conf.stt_disponible:
+        return None
+    return AdaptadorGroqWhisper(api_key=conf.groq_api_key)
+
+
+def construir_tts(config: Configuracion | None = None) -> AdaptadorPolly:
+    conf = config or configuracion()
+    return AdaptadorPolly(region=conf.aws_region, voz=VOZ_TTS, motor=MOTOR_TTS)

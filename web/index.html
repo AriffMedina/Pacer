@@ -11,12 +11,16 @@
   <button id="hablar">Mantén presionado para hablar</button>
 
   <p id="estado">Listo.</p>
+
+  <div id="conversacion"></div>
+
   <pre id="diagnostico"></pre>
 
   <script>
     const boton = document.getElementById("hablar");
     const estado = document.getElementById("estado");
     const diagnostico = document.getElementById("diagnostico");
+    const conversacion = document.getElementById("conversacion");
 
     let grabadora = null;
     let trozos = [];
@@ -81,16 +85,54 @@
 
       try {
         const respuesta = await fetch("/api/turno", { method: "POST", body: cuerpo });
+        const datos = await respuesta.json();
+
         if (!respuesta.ok) {
-          estado.textContent = "El servidor respondió " + respuesta.status + ".";
+          estado.textContent = "Error: " + (datos.error || respuesta.status);
+          anotar(datos.detalle || JSON.stringify(datos));
           return;
         }
-        const audio = new Audio(URL.createObjectURL(await respuesta.blob()));
-        await audio.play();
+
+        decir("Tú", datos.transcripcion);
+        decir("Coach", datos.respuesta);
+
+        if (datos.herramientas.length) {
+          anotar("herramientas: " + datos.herramientas.join(", "));
+        }
+        if (datos.plan_version) {
+          anotar("plan v" + datos.plan_version);
+        }
+        if (datos.motivo_cambio) {
+          anotar("motivo: " + datos.motivo_cambio);
+        }
+        const l = datos.latencia_ms;
+        anotar(`latencia ${l.total} ms · voz→texto ${l.transcripcion} · coach ${l.coach} · texto→voz ${l.voz}`);
+
+        if (datos.audio_base64) {
+          await reproducir(datos.audio_base64);
+        }
         estado.textContent = "Listo.";
       } catch (error) {
         estado.textContent = "Falló el envío.";
         anotar("fetch falló: " + error.message);
+      }
+    }
+
+    function decir(quien, texto) {
+      const linea = document.createElement("p");
+      linea.textContent = quien + ": " + texto;
+      conversacion.appendChild(linea);
+      linea.scrollIntoView();
+    }
+
+    async function reproducir(base64) {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+      const audio = new Audio(url);
+      try {
+        await audio.play();
+      } catch (error) {
+        anotar("no se pudo reproducir: " + error.message);
       }
     }
 
