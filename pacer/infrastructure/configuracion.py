@@ -5,14 +5,24 @@ sin Docker, Postgres cuando el compose está arriba. Los modelos de SQLAlchemy
 son los mismos en ambos casos.
 """
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SQLITE_LOCAL = "sqlite+aiosqlite:///./pacer.db"
 
+# Anclado a la raíz del proyecto, NO al directorio de trabajo: un `env_file`
+# relativo se pierde en silencio al lanzar el proceso desde otra carpeta o con
+# otro WORKDIR en el contenedor, y la app arranca con la configuración vacía
+# sin dar un solo error.
+RAIZ_DEL_PROYECTO = Path(__file__).resolve().parents[2]
+
 
 class Configuracion(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=RAIZ_DEL_PROYECTO / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     database_url: str = SQLITE_LOCAL
