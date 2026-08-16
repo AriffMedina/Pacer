@@ -47,17 +47,22 @@ async def vencidos(
     _exigir_token(x_pacer_token)
 
     async with peticion.app.state.fabrica() as bd:
-        pendientes = await RepositorioRecordatorio(bd).vencidos(datetime.now(UTC))
+        pendientes = await RepositorioRecordatorio(bd).vencidos_con_destino(
+            datetime.now(UTC)
+        )
 
+    # `chat_id` viaja con cada recordatorio: el nodo de Telegram lo lee del dato
+    # en vez de tenerlo fijo. El mismo workflow sirve para un corredor o mil.
     return [
         {
             "id": r.id,
             "corredor_id": r.corredor_id,
+            "chat_id": chat_id,
             "texto": r.texto,
             "canal": r.canal,
             "clave_idempotencia": r.clave,
         }
-        for r in pendientes
+        for r, chat_id in pendientes
     ]
 
 

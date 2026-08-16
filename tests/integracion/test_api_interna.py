@@ -88,7 +88,10 @@ async def _sembrar_plan_con_sesion_pasada(cliente: TestClient) -> None:
     )
 
     async with cliente.app.state.fabrica() as bd:
-        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        corredores = RepositorioCorredor(bd)
+        corredor = await corredores.obtener_o_crear_piloto()
+        # Sin canal vinculado el recordatorio no tendría dónde llegar.
+        await corredores.vincular_telegram(corredor.id, 555000)
         plan = crear_plan(perfil, hoy=datetime.now(UTC).date() - timedelta(days=2))
         await RepositorioPlan(bd).guardar(plan, corredor_id=corredor.id)
 
@@ -118,6 +121,8 @@ def test_el_ciclo_completo_del_contrato_con_n8n(cliente: TestClient) -> None:
     assert vencidos
     assert vencidos[0]["clave_idempotencia"]
     assert vencidos[0]["canal"] == "telegram"
+    # n8n lee el destino del dato, no de un campo fijo en el nodo.
+    assert vencidos[0]["chat_id"] == 555000
 
     primero = vencidos[0]["id"]
     entrega = cliente.post(

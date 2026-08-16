@@ -94,6 +94,49 @@ async def test_confirmar_algo_inexistente_no_revienta(
     assert not await recordatorios.confirmar(9999)
 
 
+async def test_el_vencido_viaja_con_el_chat_al_que_va(
+    corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
+) -> None:
+    """A quién entregar lo decide el backend, no un campo fijo en n8n."""
+    corredor = await corredores.obtener_o_crear_piloto()
+    await corredores.vincular_telegram(corredor.id, 987654)
+    await recordatorios.materializar([uno(corredor.id, "a", AYER)])
+
+    con_destino = await recordatorios.vencidos_con_destino(HOY)
+
+    assert len(con_destino) == 1
+    _, chat_id = con_destino[0]
+    assert chat_id == 987654
+
+
+async def test_sin_canal_vinculado_no_sale_a_entregarse(
+    corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
+) -> None:
+    """Un recordatorio sin destino solo haría fallar la entrega."""
+    corredor = await corredores.obtener_o_crear_piloto()
+    await recordatorios.materializar([uno(corredor.id, "a", AYER)])
+
+    assert await recordatorios.vencidos_con_destino(HOY) == []
+    # Sigue existiendo: cuando vincule Telegram, se entrega.
+    assert len(await recordatorios.vencidos(HOY)) == 1
+
+
+async def test_cada_corredor_recibe_en_su_propio_chat(
+    corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
+) -> None:
+    ana = await corredores.obtener_o_crear(telegram_chat_id=111)
+    beto = await corredores.obtener_o_crear(telegram_chat_id=222)
+    await recordatorios.materializar(
+        [uno(ana.id, "ana", AYER), uno(beto.id, "beto", AYER)]
+    )
+
+    destinos = {
+        r.clave: chat for r, chat in await recordatorios.vencidos_con_destino(HOY)
+    }
+
+    assert destinos == {"ana": 111, "beto": 222}
+
+
 async def test_los_vencidos_salen_del_mas_viejo_al_mas_nuevo(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:

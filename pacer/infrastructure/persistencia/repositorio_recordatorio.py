@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pacer.domain.entidades.recordatorio import Recordatorio
-from pacer.infrastructure.persistencia.modelos import RecordatorioORM
+from pacer.infrastructure.persistencia.modelos import CorredorORM, RecordatorioORM
 
 LIMITE_POR_TANDA = 20
 
@@ -58,6 +58,31 @@ class RepositorioRecordatorio:
         )
         filas = (await self._sesion.execute(consulta)).scalars()
         return [_a_dominio(fila) for fila in filas]
+
+    async def vencidos_con_destino(
+        self, ahora: datetime, limite: int = LIMITE_POR_TANDA
+    ) -> list[tuple[Recordatorio, int]]:
+        """Vencidos junto al chat al que van, en una sola consulta.
+
+        A quién entregar lo decide el backend, no un campo fijo en un nodo de
+        n8n. Así el mismo workflow sirve para un corredor o para mil.
+
+        Un recordatorio de alguien sin canal vinculado NO sale: no tiene dónde
+        llegar, y devolverlo solo haría fallar la entrega.
+        """
+        consulta = (
+            select(RecordatorioORM, CorredorORM.telegram_chat_id)
+            .join(CorredorORM, CorredorORM.id == RecordatorioORM.corredor_id)
+            .where(
+                RecordatorioORM.enviado_en.is_(None),
+                RecordatorioORM.programado_para <= ahora,
+                CorredorORM.telegram_chat_id.is_not(None),
+            )
+            .order_by(RecordatorioORM.programado_para)
+            .limit(limite)
+        )
+        filas = (await self._sesion.execute(consulta)).all()
+        return [(_a_dominio(fila[0]), fila[1]) for fila in filas]
 
     async def confirmar(
         self, recordatorio_id: int, id_mensaje_proveedor: str | None = None
