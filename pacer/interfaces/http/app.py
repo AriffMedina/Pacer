@@ -6,6 +6,7 @@ turno lento y un turno roto se ven igual desde el teléfono.
 """
 
 import asyncio
+import logging
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -37,6 +38,8 @@ from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 
 DIRECTORIO_WEB = Path(__file__).resolve().parents[3] / "web"
+
+registro = logging.getLogger("pacer")
 
 
 @dataclass
@@ -78,12 +81,28 @@ async def _adelantar_sintesis(turno_id: str, texto: str) -> None:
     """
     try:
         audio = await asyncio.to_thread(app.state.tts.sintetizar, texto)
-    except Exception:  # noqa: BLE001 — un fallo de voz jamás rompe un turno
+    except Exception as fallo:  # noqa: BLE001 — un fallo de voz jamás rompe un turno
+        registro.warning("no se pudo adelantar la voz del turno %s: %s", turno_id, fallo)
         return
 
     _YA_SINTETIZADO[turno_id] = audio
     while len(_YA_SINTETIZADO) > MAX_PENDIENTES:
         _YA_SINTETIZADO.popitem(last=False)
+
+
+async def _calentar_voz(app: FastAPI, activo: bool) -> None:
+    """Primera llamada a Polly al arrancar, no en el primer turno del usuario.
+
+    Medido: la primera síntesis tarda ~850 ms y las siguientes ~200. Ese costo
+    lo paga el servidor al levantar, no la persona que abre la app —que es
+    justo el turno donde se forma la primera impresión.
+    """
+    if not activo:
+        return
+    try:
+        await asyncio.to_thread(app.state.tts.sintetizar, "listo")
+    except Exception as fallo:  # noqa: BLE001 — arrancar sin voz es mejor que no arrancar
+        registro.warning("no se pudo calentar la voz: %s", fallo)
 
 
 @asynccontextmanager
@@ -98,6 +117,8 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
     app.state.llm = construir_llm(config)
     app.state.stt = construir_stt(config)
     app.state.tts = construir_tts(config)
+
+    await _calentar_voz(app, config.calentar_voz)
 
     yield
 

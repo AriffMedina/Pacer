@@ -43,6 +43,9 @@ class LLMFalso:
 def cliente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     # Gana sobre el .env: pydantic-settings prioriza el entorno.
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/prueba.db")
+    # Sin esto cada arranque de TestClient llamaría a Polly de verdad: los
+    # tests pasaron de 5 a 44 segundos antes de apagarlo.
+    monkeypatch.setenv("CALENTAR_VOZ", "false")
 
     from pacer.interfaces.http import app as modulo
 

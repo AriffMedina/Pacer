@@ -68,7 +68,9 @@
 
       try {
         const flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
-        grabadora = new MediaRecorder(flujo);
+        // 24 kbps alcanza de sobra para voz y recorta el archivo a la mitad:
+        // menos subida desde el teléfono y menos que procesar del otro lado.
+        grabadora = new MediaRecorder(flujo, { audioBitsPerSecond: 24000 });
         trozos = [];
         grabadora.ondataavailable = (e) => trozos.push(e.data);
         grabadora.onstop = enviar;

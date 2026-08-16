@@ -34,6 +34,10 @@ class Configuracion(BaseSettings):
     # poder medir el intercambio sin tocar código.
     motor_tts: str = "generative"
 
+    # Una síntesis de cortesía al arrancar, para que el primer turno real no
+    # pague el arranque en frío. Se apaga en tests: no deben tocar la red.
+    calentar_voz: bool = True
+
     groq_api_key: str = ""
     telegram_bot_token: str = ""
     langfuse_public_key: str = ""
