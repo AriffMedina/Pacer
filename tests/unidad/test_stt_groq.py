@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import pytest
+from tenacity import wait_none
 
 from pacer.domain.puertos.voz import ErrorDeTranscripcion
 from pacer.infrastructure.stt.groq_whisper import (
@@ -41,6 +42,13 @@ def simular(monkeypatch: pytest.MonkeyPatch, *codigos: int) -> list[int]:
 
     monkeypatch.setattr(httpx.Client, "post", post_falso)
     return llamadas
+
+
+def adaptador_sin_esperas() -> AdaptadorGroqWhisper:
+    """Mismo adaptador, sin el backoff: probamos que reintenta, no que duerme."""
+    adaptador = AdaptadorGroqWhisper(api_key="x")
+    AdaptadorGroqWhisper.transcribir.retry.wait = wait_none()  # type: ignore[attr-defined]
+    return adaptador
 
 VERBOSE = {
     "text": " Ayer corrí doce kilómetros y acabé muerto.",
@@ -105,7 +113,7 @@ def test_un_401_pasajero_se_supera_reintentando(
 ) -> None:
     llamadas = simular(monkeypatch, 401, 200)
 
-    resultado = AdaptadorGroqWhisper(api_key="x").transcribir(b"audio", "t.webm")
+    resultado = adaptador_sin_esperas().transcribir(b"audio", "t.webm")
 
     assert resultado.texto == "hola"
     assert len(llamadas) == 2
@@ -117,7 +125,7 @@ def test_si_falla_siempre_se_rinde_con_el_error_real(
     llamadas = simular(monkeypatch, 401, 401, 401)
 
     with pytest.raises(ErrorDeTranscripcion):
-        AdaptadorGroqWhisper(api_key="x").transcribir(b"audio", "t.webm")
+        adaptador_sin_esperas().transcribir(b"audio", "t.webm")
 
     assert len(llamadas) == 3
 
@@ -128,7 +136,7 @@ def test_un_error_definitivo_no_gasta_reintentos(
     llamadas = simular(monkeypatch, 400)
 
     with pytest.raises(ErrorDeTranscripcion):
-        AdaptadorGroqWhisper(api_key="x").transcribir(b"audio", "t.webm")
+        adaptador_sin_esperas().transcribir(b"audio", "t.webm")
 
     assert len(llamadas) == 1
 

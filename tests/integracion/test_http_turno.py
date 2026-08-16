@@ -4,13 +4,14 @@ Ni Groq ni Polly ni Bedrock se tocan aquí, y la base es un archivo temporal:
 un test que le escribe a la base real o gasta llamadas de API no es un test.
 """
 
+import os
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import RespuestaLLM
 from pacer.domain.puertos.voz import Transcripcion
 
@@ -39,24 +40,44 @@ class LLMFalso:
         )
 
 
-@pytest.fixture
-def cliente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    # Gana sobre el .env: pydantic-settings prioriza el entorno.
-    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/prueba.db")
-    # Sin esto cada arranque de TestClient llamaría a Polly de verdad: los
-    # tests pasaron de 5 a 44 segundos antes de apagarlo.
-    monkeypatch.setenv("CALENTAR_VOZ", "false")
+@pytest.fixture(scope="module")
+def _app_levantada(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[TestClient]:
+    """La app se levanta UNA vez por módulo.
+
+    Cada arranque construye clientes de boto3 y crea el esquema: hacerlo por
+    test costaba ~1 s cada uno. El estado de sesión se reinicia por test en la
+    fixture `cliente`.
+    """
+    carpeta = tmp_path_factory.mktemp("bd")
+    previo = dict(os.environ)
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{carpeta}/prueba.db"
+    os.environ["CALENTAR_VOZ"] = "false"
 
     from pacer.interfaces.http import app as modulo
 
-    modulo.sesion.perfil = type(modulo.sesion.perfil)()
-    modulo.sesion.mensajes = []
-
     with TestClient(modulo.app) as cliente:
-        cliente.app.state.stt = STTFalso()
-        cliente.app.state.tts = TTSFalso()
-        cliente.app.state.llm = LLMFalso()
         yield cliente
+
+    os.environ.clear()
+    os.environ.update(previo)
+
+
+@pytest.fixture
+def cliente(_app_levantada: TestClient) -> TestClient:
+    """Estado limpio y adaptadores falsos para cada test."""
+    from pacer.interfaces.http import app as modulo
+
+    modulo.sesion.perfil = Perfil()
+    modulo.sesion.mensajes = []
+    modulo._PENDIENTES.clear()
+    modulo._YA_SINTETIZADO.clear()
+
+    _app_levantada.app.state.stt = STTFalso()
+    _app_levantada.app.state.tts = TTSFalso()
+    _app_levantada.app.state.llm = LLMFalso()
+    return _app_levantada
 
 
 def audio_de_prueba() -> dict[str, Any]:
