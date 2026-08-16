@@ -102,7 +102,11 @@ def _volumenes_por_semana(
     tendencia = float(km_inicial)
     # Techo duro: la carga deja de crecer al llegar al pico de la distancia y
     # se sostiene. Un entrenador no sube el volumen indefinidamente.
-    techo = float(PICO_MAX_KM[distancia])
+    #
+    # Si el corredor YA entrena por encima de ese pico, el techo es su volumen
+    # actual: el generador está para no empujarlo más allá de lo típico, no
+    # para bajarle la carga a quien ya la sostiene.
+    techo = max(float(PICO_MAX_KM[distancia]), tendencia)
     cada = descarga_cada(nivel)
     en_base = descarga_en_base(nivel)
     indice = 0

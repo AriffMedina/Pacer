@@ -65,9 +65,13 @@ def test_regla_del_diez_por_ciento_es_invariante(perfil: dict[str, object]) -> N
 @given(perfil=perfiles_validos())
 def test_ninguna_semana_supera_el_techo_de_volumen(perfil: dict[str, object]) -> None:
     plan = generar_plan(**perfil)  # type: ignore[arg-type]
-    # Tolerancia de redondeo: el total semanal es la suma de kilómetros ya
-    # redondeados por sesión, así que puede pasarse del techo por décimas.
-    techo = PICO_MAX_KM[str(perfil["distancia"])] + 0.5
+    # El techo es el pico de la distancia, salvo que el corredor ya entrene por
+    # encima: en ese caso su propio volumen es el techo y no se le baja.
+    # El +0.5 absorbe el redondeo por sesión.
+    techo = (
+        max(PICO_MAX_KM[str(perfil["distancia"])], float(perfil["km_semana"]))  # type: ignore[arg-type]
+        + 0.5
+    )
 
     for semana in plan.semanas:
         assert semana.km_total <= techo
