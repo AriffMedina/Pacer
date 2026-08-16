@@ -140,13 +140,27 @@ def test_la_proxima_saltea_lo_que_ya_se_reporto() -> None:
     assert proxima.cuando == "Mañana"
 
 
-def test_una_proxima_lejana_se_nombra_por_su_dia() -> None:
+def test_una_proxima_de_esta_semana_se_nombra_por_su_dia() -> None:
     plan = plan_con(sesion(23))  # domingo
 
     proxima = resumir(plan, hoy=HOY).proxima
 
     assert proxima is not None
     assert proxima.cuando == "Dom 23"
+
+
+def test_una_proxima_de_dentro_de_meses_lleva_el_mes() -> None:
+    """Con un plan que arranca en noviembre, "Sáb 28" no dice nada: hay un 28
+    en cada mes. Un plan lejano es un caso normal, no una rareza."""
+    plan = Plan(
+        version=1,
+        semanas=(Semana(numero=1, sesiones=(Sesion(fecha=date(2026, 11, 28), tipo="facil", km=6.0),)),),
+    )
+
+    proxima = resumir(plan, hoy=HOY).proxima
+
+    assert proxima is not None
+    assert proxima.cuando == "Sáb 28 nov"
 
 
 def test_con_el_plan_terminado_no_hay_proxima() -> None:

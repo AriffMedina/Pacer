@@ -236,8 +236,10 @@ def _generar(
     if arranque > hoy:
         resultado["empieza_el"] = arranque.isoformat()
         resultado["que_hacer_mientras"] = (
-            "Falta para arrancar el bloque. Dile que hasta esa fecha mantenga "
-            "lo que ya hace, sin subir carga, y que el plan aparecerá entonces."
+            "El plan YA ESTÁ y el corredor puede verlo entero en la app desde "
+            "ahora; lo que empieza en esa fecha es el entrenamiento. NO le "
+            "digas que el plan aparecerá después. Dile que hasta entonces "
+            "mantenga lo que ya hace, sin subir carga."
         )
 
     return nuevo, resultado

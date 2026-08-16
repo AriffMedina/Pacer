@@ -405,6 +405,10 @@ async def plan_actual() -> dict[str, Any]:
             "tablero": tablero,
         }
 
+    # Un plan para una carrera lejana existe desde que se genera, pero empieza
+    # más adelante. Sin decirlo, la vista se lee como si ya estuviera en curso.
+    empieza_el = plan.semanas[0].sesiones[0].fecha
+
     semana_actual = next(
         (
             s.numero
@@ -430,6 +434,9 @@ async def plan_actual() -> dict[str, Any]:
         else None,
         "semana_actual": semana_actual,
         "semanas_totales": len(plan.semanas),
+        "empieza_el": empieza_el.isoformat(),
+        "arrancado": empieza_el <= hoy,
+        "dias_para_arrancar": max((empieza_el - hoy).days, 0),
         "hoy": hoy.isoformat(),
         "semanas": [
             {

@@ -29,6 +29,9 @@ MESES = (
 # Más allá de esto se pierde la cuenta y una fecha dice más que "hace 12 días".
 DIAS_EN_PALABRAS = 6
 
+# Dentro de la semana que viene, el día de la semana ubica solo. Más allá no.
+DIAS_SIN_MES = 7
+
 
 @dataclass(frozen=True)
 class DiaDeLaSemana:
@@ -173,7 +176,13 @@ def _cuando_viene(fecha: date, hoy: date) -> str:
         return "Hoy"
     if faltan == 1:
         return "Mañana"
-    return f"{ABREVIATURAS[fecha.weekday()]} {fecha.day}"
+
+    dia = f"{ABREVIATURAS[fecha.weekday()]} {fecha.day}"
+    if faltan <= DIAS_SIN_MES:
+        return dia
+    # Más allá de la semana que viene hay un 28 en cada mes. Pasa de verdad:
+    # un plan para una carrera lejana arranca dentro de meses.
+    return f"{dia} {MESES[fecha.month - 1]}"
 
 
 def _cuando_fue(fecha: date, hoy: date) -> str:

@@ -437,6 +437,13 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .encabezado-hoja{display:flex;align-items:center;justify-content:space-between;
   gap:12px;margin:2px 0 14px}
 
+/* Un plan que todavía no empieza SÍ se ve —es lo que da confianza— pero tiene
+   que decir que no ha empezado, o la vista miente por omisión. */
+.por-empezar{display:flex;gap:13px;align-items:flex-start;margin-bottom:14px;
+  padding:14px 16px;border-radius:var(--radio);background:var(--tarjeta-alta);
+  border:1px solid rgba(198,249,74,.28)}
+.por-empezar svg{width:17px;height:17px;color:var(--acento);flex:none;margin-top:2px}
+
 .grafica{display:flex;align-items:flex-end;gap:5px;
   height:clamp(190px,44vh,360px);margin:22px 0 10px}
 .grafica div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
@@ -1085,11 +1092,14 @@ function pintarPerfil(){
           datos.objetivo ? ' · ' + NOMBRE_OBJETIVO[datos.objetivo] : ''}</div>
       </div>
     </div>
-    ${datos.hay_plan ? `
+    ${!datos.hay_plan ? `
+      <div class="pie" style="margin-top:11px">Todavía no hay plan.</div>`
+    : !datos.arrancado ? `
+      <div class="pie" style="margin-top:11px">Tu plan empieza en ${datos.dias_para_arrancar} días.</div>`
+    : `
       <div class="riel"><i style="width:${pct}%"></i></div>
       <div class="pie">Semana ${datos.semana_actual} de ${datos.semanas_totales}
-        · ${t.racha} seguida${t.racha === 1 ? '' : 's'}</div>` : `
-      <div class="pie" style="margin-top:11px">Todavía no hay plan.</div>`}`;
+        · ${t.racha} seguida${t.racha === 1 ? '' : 's'}</div>`}`;
 }
 
 function pintarLateral(){
@@ -1153,6 +1163,9 @@ function pintarLateral(){
 
 /* --- vistas de datos --- */
 const DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+// Con el mes: un plan puede cruzar de noviembre a diciembre y "SÁB 28" solo
+// no ubica nada.
+const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 // Construir la fecha desde el ISO evita el corrimiento de un día por zona horaria.
 const fechaLocal = (iso) => { const [a,m,d] = iso.split('-').map(Number); return new Date(a, m-1, d); };
 
@@ -1165,11 +1178,22 @@ function pintarPlan(){
 
   $('#v-plan').innerHTML = `
     <div class="encabezado-hoja">
-      <p class="eyebrow">Semana en curso${datos.version > 1 ? ` · plan v${datos.version}` : ''}</p>
+      <p class="eyebrow">${datos.arrancado ? 'Semana en curso' : 'Plan por empezar'}${
+        datos.version > 1 ? ` · plan v${datos.version}` : ''}</p>
       <button class="boton riesgo" id="btn-borrar-plan">${svg('bote')} Borrar plan</button>
     </div>
+    ${datos.arrancado ? '' : `
+      <div class="por-empezar">
+        ${svg('proxima')}
+        <div>
+          <div class="titulo">Tu plan empieza el ${textoCorto(datos.empieza_el)}</div>
+          <p class="vacio" style="margin-top:4px">Faltan ${datos.dias_para_arrancar} días.
+            Puedes verlo entero desde ahora; hasta esa fecha sigue como vas, sin subir carga.</p>
+        </div>
+      </div>`}
     <div class="metricas">
-      ${dato('Semana', `${datos.semana_actual} / ${datos.semanas_totales}`)}
+      ${dato(datos.arrancado ? 'Semana' : 'Primera semana',
+             `${datos.semana_actual} / ${datos.semanas_totales}`)}
       ${dato('Bloque', NOMBRE_BLOQUE[semana.bloque] || '—')}
       ${dato('Volumen', semana.km_total + ' km')}
     </div>
@@ -1217,7 +1241,7 @@ function filaSesion(s, hoy, id){
   return `<div class="sesion ${s.fecha === hoy ? 'hoy' : ''}" data-abre="${id}">
     <i class="tira ${s.tipo}"></i>
     <div class="cuerpo">
-      <div class="eyebrow">${DIAS[f.getDay()]} ${String(f.getDate()).padStart(2,'0')}</div>
+      <div class="eyebrow">${DIAS[f.getDay()]} ${String(f.getDate()).padStart(2,'0')} ${MESES_CORTOS[f.getMonth()]}</div>
       <div class="tipo">${NOMBRE_TIPO[s.tipo] || s.tipo}</div>
       ${r ? `<div class="cuando" style="font-size:12.5px;color:var(--texto-3);margin-top:3px">${escapar(r.resumen)}</div>` : ''}
       ${s.completada ? `<span class="hecha">HECHA${
@@ -1471,6 +1495,11 @@ async function elegirObjetivo(id){
     anotar(`carrera objetivo: ${d.fecha_carrera} · ${d.como_se_entrena}`);
     await cargar();
   }catch(err){ anotar('no se pudo elegir objetivo: ' + err.message); }
+}
+
+function textoCorto(f){
+  const d = fechaLocal(f);
+  return `${d.getDate()} de ${MESES_LARGOS[d.getMonth()]}`;
 }
 
 function textoFecha(f){
