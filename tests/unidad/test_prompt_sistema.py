@@ -21,6 +21,13 @@ def test_ordena_guardar_antes_de_preguntar() -> None:
     assert "Guardar primero, preguntar después" in prompt
 
 
+def test_ordena_registrar_la_sesion_sin_esperar_los_kilometros() -> None:
+    prompt = construir_prompt()
+
+    assert "REGLA DE SESIÓN" in prompt
+    assert "kilómetros son OPCIONALES" in prompt
+
+
 def test_deja_claro_que_el_modelo_no_calcula_el_plan() -> None:
     prompt = construir_prompt()
 
