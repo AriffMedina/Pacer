@@ -6,7 +6,7 @@ y `import-linter` es quien vigila que esa frontera no se cruce.
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy import BigInteger, DateTime, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Instantes CON zona horaria. Sin esto Postgres crea `timestamp without time
@@ -32,8 +32,11 @@ class CorredorORM(Base):
     __tablename__ = "corredor"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # BigInteger y no el INTEGER que infiere `Mapped[int]`: los chat id de
+    # Telegram pasan de los 2.147.483.647 que aguanta un int32. SQLite guarda
+    # enteros de cualquier tamaño y no se queja; Postgres rechaza el UPDATE.
     telegram_chat_id: Mapped[int | None] = mapped_column(
-        unique=True, index=True, default=None
+        BigInteger, unique=True, index=True, default=None
     )
     email: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
     password_hash: Mapped[str | None] = mapped_column(default=None)

@@ -9,7 +9,9 @@ from datetime import date
 from pacer.domain.entidades.perfil import Perfil
 from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
 
-CHAT = 55123
+# Un chat id real de Telegram tiene 10 digitos y NO cabe en un int32.
+# Probar con numeros comodos ocultaba que la columna era INTEGER.
+CHAT = 5457315468
 
 PERFIL = Perfil(
     objetivo="21k",
@@ -67,8 +69,8 @@ async def test_dos_corredores_quedan_aislados(
     corredores: RepositorioCorredor,
 ) -> None:
     """El multiusuario está en el modelo; lo que falta es autenticación."""
-    ana = await corredores.obtener_o_crear(telegram_chat_id=1)
-    beto = await corredores.obtener_o_crear(telegram_chat_id=2)
+    ana = await corredores.obtener_o_crear(telegram_chat_id=7123456789)
+    beto = await corredores.obtener_o_crear(telegram_chat_id=8987654321)
 
     await corredores.guardar_perfil(ana.id, PERFIL)
 
@@ -133,8 +135,8 @@ async def test_solo_se_cargan_los_ultimos_turnos(
 async def test_la_conversacion_de_otro_corredor_no_se_mezcla(
     corredores: RepositorioCorredor,
 ) -> None:
-    ana = await corredores.obtener_o_crear(telegram_chat_id=1)
-    beto = await corredores.obtener_o_crear(telegram_chat_id=2)
+    ana = await corredores.obtener_o_crear(telegram_chat_id=7123456789)
+    beto = await corredores.obtener_o_crear(telegram_chat_id=8987654321)
 
     await corredores.recordar(ana.id, "user", "lo de Ana")
 
