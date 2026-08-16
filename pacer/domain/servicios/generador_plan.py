@@ -23,6 +23,7 @@ from pacer.domain.reglas.periodizacion import repartir_bloques
 from pacer.domain.reglas.progresion import PROGRESION_SEMANAL_MAX
 
 CALIDAD_PCT = 0.20
+MARGEN_DE_REDONDEO = 1.01
 TAPER_REDUCCION_VOLUMEN = 0.50
 # Cuánto más largo es el largo que una sesión fácil cuando hay que rebalancear.
 PESO_LARGO = 1.3
@@ -244,7 +245,11 @@ def _frenar_por_el_largo(
         return semana
 
     permitido = largo_maximo_permitido(distancia, largos_recientes)
-    if largo.km <= permitido:
+
+    # El margen del 1% distingue un recorte real de un desborde por redondeo:
+    # el largo crece justo al 10% y se pasa por centésimas casi cada semana.
+    # Sin esto, todas las semanas quedarían marcadas y la bandera no diría nada.
+    if largo.km <= permitido * MARGEN_DE_REDONDEO:
         return semana
 
     factor = permitido / largo.km

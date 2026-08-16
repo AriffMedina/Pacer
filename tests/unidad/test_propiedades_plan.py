@@ -28,9 +28,10 @@ from pacer.domain.servicios.generador_plan import generar_plan
 
 INICIO = date(2026, 8, 17)
 
-# 1% absorbe el redondeo por sesión a un decimal, sin tapar una violación real:
-# el techo que se prueba es del 10%.
-TOLERANCIA_REDONDEO = 1.01
+# Tiene que superar el margen de recorte del generador (1%) MÁS el redondeo por
+# sesión, o el test contradice a la implementación por centésimas. Sigue muy por
+# debajo del 10% que se está probando, así que no tapa una violación real.
+TOLERANCIA_REDONDEO = 1.02
 
 # Todas las combinaciones que la compuerta dura admite. `maraton` + `nuevo`
 # queda fuera por construcción: su mínimo es None, o sea rechazo incondicional.
