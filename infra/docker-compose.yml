@@ -1,3 +1,11 @@
+# `docker compose up` levanta el sistema completo: base de datos y aplicación.
+# Ese es el primero de los cuatro criterios de entrega.
+#
+# Langfuse queda bajo un perfil y NO arranca por defecto: el proyecto usa
+# Langfuse Cloud. Un servicio extra sin verificar en el camino por defecto solo
+# puede romper el arranque, y arrancar a la primera vale más que traer de todo.
+#   docker compose --profile observabilidad-local up
+
 services:
   postgres:
     image: postgres:16
@@ -9,16 +17,40 @@ services:
     ports:
       # 5433 en el host a propósito: en una máquina con PostgreSQL instalado
       # nativamente el 5432 ya está ocupado y el contenedor no levanta.
-      # Dentro de la red del compose Langfuse sigue hablando por el 5432.
+      # Dentro de la red del compose se sigue hablando por el 5432.
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pacer -d pacer"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Las credenciales vienen del .env de la raíz, nunca del compose.
+    env_file:
+      - ../.env
+    environment:
+      # Dentro de la red del compose se habla con el servicio, no con localhost.
+      DATABASE_URL: postgresql+asyncpg://pacer:pacer@postgres:5432/pacer
+    ports:
+      - "8000:8000"
 
   langfuse:
     image: langfuse/langfuse:2
+    profiles: ["observabilidad-local"]
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
