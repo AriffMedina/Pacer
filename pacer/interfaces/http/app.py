@@ -96,6 +96,7 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
                     hoy=hoy,
                     fecha_carrera=corredor.perfil.fecha_carrera,
                     carreras=await agenda.todas(corredor.id),
+                    perfil=corredor.perfil,
                 )
             )
 
@@ -231,6 +232,8 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
         return None
 
     async def atender(mensaje: MensajeEntrante) -> None:
+        hoy = datetime.now(UTC).date()
+
         async with app.state.fabrica() as bd:
             corredores = RepositorioCorredor(bd)
             corredor = await corredores.obtener_o_crear_piloto()
@@ -240,17 +243,31 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
                 corredor.id, TURNOS_RECORDADOS
             )
 
+            repositorio = RepositorioPlan(bd)
+            # Mismo estado que por la web. Antes Telegram recibía el prompt
+            # pelado: ni fecha, ni plan, ni perfil. El mismo coach contestaba
+            # cosas distintas según por dónde le hablaras.
+            sistema = construir_prompt(
+                construir_bloque(
+                    await repositorio.version_activa(corredor.id),
+                    hoy=hoy,
+                    fecha_carrera=corredor.perfil.fecha_carrera,
+                    carreras=await RepositorioCarrera(bd).todas(corredor.id),
+                    perfil=corredor.perfil,
+                )
+            )
+
             resultado = await atender_mensaje_de_telegram(
                 mensaje,
                 llm=app.state.llm,
                 stt=app.state.stt,
                 canal=canal,
-                repositorio=RepositorioPlan(bd),
-                sistema=construir_prompt(),
+                repositorio=repositorio,
+                sistema=sistema,
                 historial=historial,
                 perfil=corredor.perfil,
                 corredor_id=corredor.id,
-                hoy=datetime.now(UTC).date(),
+                hoy=hoy,
             )
 
             if resultado.atendido:

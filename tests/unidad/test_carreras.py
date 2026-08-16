@@ -232,7 +232,7 @@ def test_el_coach_ve_las_carreras_aunque_todavia_no_haya_plan() -> None:
 
     bloque = construir_bloque(plan=None, hoy=HOY, carreras=carreras)
 
-    assert "todavía no hay plan" in bloque
+    assert "PLAN: todavía no hay" in bloque
     assert "La del trabajo" in bloque
 
 

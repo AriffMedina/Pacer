@@ -8,6 +8,7 @@ instrucción escrita en el prompt.
 from datetime import date
 
 from pacer.domain.entidades.carrera import Carrera, pendientes
+from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.entidades.plan import Plan, Semana, Sesion
 from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
 
@@ -43,6 +44,7 @@ def construir_bloque(
     hoy: date,
     fecha_carrera: date | None = None,
     carreras: tuple[Carrera, ...] = (),
+    perfil: Perfil | None = None,
 ) -> str:
     """Arma el bloque de estado que el coach lee antes de responder.
 
@@ -51,7 +53,12 @@ def construir_bloque(
     que enterarse igual. Si no, agregar algo en la agenda y que el coach no lo
     sepa se siente como hablar con dos aplicaciones distintas.
     """
-    lineas = []
+    # La fecha va primero y en dos formatos: hablado para que lo diga bien, e
+    # ISO para que razone sobre ella sin traducir.
+    lineas = [f"FECHA DE HOY: {_fecha_hablada(hoy)} ({hoy.isoformat()})"]
+
+    if perfil is not None:
+        lineas.append(_linea_del_corredor(perfil))
 
     if plan is not None:
         sesiones = sorted(
@@ -68,7 +75,7 @@ def construir_bloque(
             _linea_ultima_completada(sesiones),
         ]
     else:
-        lineas.append(f"HOY: {_fecha_hablada(hoy)} · todavía no hay plan")
+        lineas.append("PLAN: todavía no hay")
 
     if carreras:
         lineas.append(_linea_carreras(carreras, hoy, fecha_carrera))
@@ -117,16 +124,48 @@ def _linea_carreras(
 
 
 def _fecha_hablada(fecha: date) -> str:
-    return f"{DIAS[fecha.weekday()]} {fecha.day} de {MESES[fecha.month - 1]}"
+    """SIEMPRE con año.
+
+    Sin él, el modelo cae al año de su entrenamiento. Pasó: dijo estar en 2024,
+    guardó una carrera de 2027 como 2025 y después rechazó el plan por falta de
+    semanas —coherente con una fecha que él mismo se inventó—. Un dato que el
+    modelo no tiene no lo deja en blanco: lo rellena.
+    """
+    return f"{DIAS[fecha.weekday()]} {fecha.day} de {MESES[fecha.month - 1]} de {fecha.year}"
+
+
+def _linea_del_corredor(perfil: Perfil) -> str:
+    """Quién es, en el prompt y no solo en el historial.
+
+    Vivía únicamente en la conversación: en cuanto los datos salían de la
+    ventana de turnos, el modelo se inventaba hasta el nombre. Los hechos del
+    corredor son hechos, y los hechos van en el estado.
+    """
+    falta = "SIN DEFINIR"
+    partes = [
+        perfil.nombre or f"nombre {falta}",
+        f"nivel {perfil.nivel or falta}",
+        f"meta {perfil.objetivo or falta}",
+        f"{perfil.dias_disponibles} días por semana"
+        if perfil.dias_disponibles
+        else f"días por semana {falta}",
+        f"{perfil.km_semana} km por semana ahora"
+        if perfil.km_semana is not None
+        else f"km por semana {falta}",
+    ]
+    if perfil.dolor_actual:
+        partes.append("REPORTÓ DOLOR: no subas carga")
+
+    return "CORREDOR: " + " · ".join(partes)
 
 
 def _linea_de_encabezado(
     hoy: date, semana: int, total: int, fecha_carrera: date | None
 ) -> str:
-    cabeza = f"HOY: {_fecha_hablada(hoy)} · SEMANA {semana} DE {total}"
+    cabeza = f"PLAN: SEMANA {semana} DE {total}"
     if fecha_carrera is None:
         return cabeza
-    return f"{cabeza} · faltan {(fecha_carrera - hoy).days} días"
+    return f"{cabeza} · faltan {(fecha_carrera - hoy).days} días para la carrera"
 
 
 def _semana_de(plan: Plan, hoy: date) -> Semana | None:

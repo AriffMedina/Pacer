@@ -1,10 +1,21 @@
 from datetime import date
 
 from pacer.application.contexto.bloque_estado import construir_bloque
+from pacer.domain.entidades.carrera import Carrera
+from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.entidades.plan import Plan, Semana, Sesion
 
 HOY = date(2026, 8, 20)
 CARRERA = date(2026, 11, 1)
+
+PERFIL = Perfil(
+    nombre="Ariff",
+    objetivo="21k",
+    nivel="intermedio",
+    dias_disponibles=4,
+    km_semana=30,
+    fecha_carrera=CARRERA,
+)
 
 
 def plan_de_prueba() -> Plan:
@@ -28,6 +39,56 @@ def plan_de_prueba() -> Plan:
         ),
     )
     return Plan(version=1, semanas=(semana_uno, semana_dos))
+
+
+def test_siempre_dice_el_ano_en_que_estamos() -> None:
+    """El fallo más caro que ha tenido esto.
+
+    El bloque decía "domingo 16 de agosto" sin año. Sin ese dato el modelo cae
+    a lo que aprendió en su entrenamiento —dijo estar en 2024—, guardó la
+    carrera con el año equivocado, y a partir de ahí todo lo demás fue
+    coherente con una fecha falsa: rechazó por falta de semanas un plan que
+    tenía siete meses por delante.
+    """
+    bloque = construir_bloque(plan_de_prueba(), hoy=HOY, fecha_carrera=CARRERA)
+
+    assert str(HOY.year) in bloque
+    assert HOY.isoformat() in bloque
+
+
+def test_el_ano_va_tambien_en_las_fechas_de_las_carreras() -> None:
+    bloque = construir_bloque(
+        hoy=HOY,
+        carreras=(
+            Carrera(fecha=date(2027, 3, 20), nombre="De marzo", distancia_km=10.0),
+        ),
+    )
+
+    assert "de 2027" in bloque
+
+
+def test_dice_quien_es_el_corredor() -> None:
+    """Sin esto el perfil solo vivía en el historial de conversación, y al
+    salirse de la ventana el modelo se inventaba hasta el nombre."""
+    bloque = construir_bloque(hoy=HOY, perfil=PERFIL)
+
+    assert "Ariff" in bloque
+    assert "intermedio" in bloque
+    assert "21k" in bloque
+    assert "4 días" in bloque
+    assert "30 km" in bloque
+
+
+def test_lo_que_del_perfil_no_se_sabe_se_dice_que_falta() -> None:
+    """Para que pregunte eso, y no algo que ya le dijeron."""
+    bloque = construir_bloque(hoy=HOY, perfil=Perfil(nombre="Ariff"))
+
+    assert "SIN DEFINIR" in bloque
+    assert "nivel" in bloque
+
+
+def test_sin_perfil_no_inventa_una_linea_de_corredor() -> None:
+    assert "CORREDOR:" not in construir_bloque(hoy=HOY)
 
 
 def test_indica_la_semana_actual_y_el_total() -> None:
