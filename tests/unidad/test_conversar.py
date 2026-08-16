@@ -7,7 +7,6 @@ from pacer.application.casos_uso.conversar import procesar_turno
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import LlamadaHerramienta, RespuestaLLM
 
-
 HOY = date(2026, 8, 16)
 
 PERFIL_COMPLETO = Perfil(
