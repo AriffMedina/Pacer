@@ -40,6 +40,23 @@ def test_el_rechazo_no_revienta_comparando_contra_none() -> None:
         validar_duracion("maraton", "nuevo", 24)
 
 
+def test_el_rechazo_trae_una_razon_explicable() -> None:
+    # Sin razón, el coach solo puede decir "el sistema no me deja", que no le
+    # sirve a nadie y suena a burocracia en vez de a entrenador.
+    with pytest.raises(PlanImposible) as error:
+        validar_duracion("maraton", "nuevo", 30)
+
+    assert error.value.razon
+    assert "lesión" in error.value.razon
+
+
+def test_la_razon_de_semanas_insuficientes_habla_de_adaptacion() -> None:
+    with pytest.raises(PlanImposible) as error:
+        validar_duracion("21k", "nuevo", 12)
+
+    assert "adaptarse" in error.value.razon
+
+
 def test_21k_para_nuevo_ahora_tiene_solucion() -> None:
     # Era el rango vacío de la v1.0: mínimo 20 contra máximo 18.
     validar_duracion("21k", "nuevo", 20)

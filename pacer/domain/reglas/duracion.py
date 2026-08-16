@@ -51,12 +51,22 @@ class PlanImposible(Exception):
     """No existe un plan seguro para esta combinación."""
 
     def __init__(
-        self, motivo: str, minimo: int | None = None, maximo: int | None = None
+        self,
+        motivo: str,
+        minimo: int | None = None,
+        maximo: int | None = None,
+        razon: str = "",
     ) -> None:
         super().__init__(motivo)
         self.motivo = motivo
         self.minimo = minimo
         self.maximo = maximo
+        self.razon = razon
+        """El porqué en lenguaje humano, para que el coach lo explique.
+
+        Sin esto el modelo solo sabe que una regla lo bloqueó, y termina
+        diciendo "el sistema no me deja" — que no le sirve de nada a nadie.
+        """
 
 
 def validar_duracion(distancia: str, nivel: str, semanas: int) -> None:
@@ -71,7 +81,14 @@ def validar_duracion(distancia: str, nivel: str, semanas: int) -> None:
     # Se ataja antes de comparar: `semanas < None` es TypeError, no False.
     if minimo is None:
         raise PlanImposible(
-            f"{distancia} no es una meta segura para alguien de nivel {nivel}"
+            f"{distancia} no es una meta segura para alguien de nivel {nivel}",
+            razon=(
+                "Correr 42 kilómetros partiendo de cero es la combinación con "
+                "más riesgo de lesión que hay en este deporte. No existe un "
+                "número de semanas que lo vuelva seguro sin haber corrido "
+                "antes de forma constante: el problema no es el tiempo, es la "
+                "base que todavía no está."
+            ),
         )
 
     maximo = SEMANAS[distancia]["max"]
@@ -81,12 +98,24 @@ def validar_duracion(distancia: str, nivel: str, semanas: int) -> None:
             f"{distancia} en nivel {nivel} necesita al menos {minimo} semanas",
             minimo=minimo,
             maximo=maximo,
+            razon=(
+                f"El cuerpo tarda en adaptarse: la carga sube poco a poco, "
+                f"semana a semana. Para {distancia} desde un nivel {nivel} eso "
+                f"toma {minimo} semanas como mínimo. Comprimirlo significa "
+                f"subir más rápido de lo que el cuerpo aguanta, y así es "
+                f"exactamente como aparecen las lesiones."
+            ),
         )
     if semanas > maximo:
         raise PlanImposible(
             f"un plan de {distancia} no se extiende más de {maximo} semanas",
             minimo=minimo,
             maximo=maximo,
+            razon=(
+                f"Un bloque de entrenamiento más largo que {maximo} semanas "
+                f"deja de rendir: se llega al pico demasiado pronto y se pierde "
+                f"forma antes de la carrera."
+            ),
         )
 
 

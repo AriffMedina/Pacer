@@ -127,8 +127,14 @@ def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:
         return None, {
             "error": "meta_inalcanzable",
             "motivo": rechazo.motivo,
+            "razon_para_explicar": rechazo.razon,
             "semanas_minimas": rechazo.minimo,
             "alternativas": ["mover la fecha de la carrera", "bajar la distancia"],
+            "como_decirlo": (
+                "Explica la razón con tus palabras, como entrenador. NUNCA "
+                "digas que el sistema no te deja: la decisión es tuya y tienes "
+                "el motivo."
+            ),
         }
 
     de_carga = [semana for semana in nuevo.semanas if not semana.es_descarga]

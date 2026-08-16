@@ -21,6 +21,13 @@ def test_ordena_guardar_antes_de_preguntar() -> None:
     assert "Guardar primero, preguntar después" in prompt
 
 
+def test_le_prohibe_echarle_la_culpa_al_sistema() -> None:
+    prompt = construir_prompt()
+
+    assert "REGLA DE VOZ PROPIA" in prompt
+    assert "el sistema" in prompt
+
+
 def test_limita_el_largo_porque_el_texto_se_vuelve_audio() -> None:
     prompt = construir_prompt()
 
