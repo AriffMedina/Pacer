@@ -1,6 +1,6 @@
 """El bucle multi-turno se prueba con un LLM falso: sin red, determinista."""
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from pacer.application.casos_uso.conversar import procesar_turno
@@ -240,7 +240,9 @@ def test_sin_plan_todavia_no_se_puede_registrar() -> None:
 
 
 def test_una_pista_ambigua_devuelve_opciones_no_un_error() -> None:
-    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY)
+    # El plan arranca días atrás para que HAYA varias sesiones pasadas sin
+    # reportar: solo entonces una pista sin marca temporal es ambigua de verdad.
+    plan = crear_plan(PERFIL_COMPLETO, hoy=HOY - timedelta(days=5))
     llm = LLMFalso(
         con_llamada(
             "registrar_sesion",
