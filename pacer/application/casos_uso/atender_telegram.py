@@ -21,6 +21,12 @@ registro = logging.getLogger("pacer")
 SIN_VOZ = "Escuché tu nota pero no pude entenderla. ¿Me la escribes?"
 SIN_CONTENIDO = "Solo entiendo texto y notas de voz por ahora."
 
+# Telegram entrega las notas de voz como `.oga` (OPUS en contenedor OGG), pero
+# Groq valida POR EXTENSIÓN antes de mirar los bytes y `.oga` no está en su
+# lista: [flac mp3 mp4 mpeg mpga m4a ogg opus wav webm]. El contenido es el
+# mismo; solo hay que nombrarlo como lo espera. Costó un 400 averiguarlo.
+NOMBRE_DE_NOTA_DE_VOZ = "nota.ogg"
+
 
 @dataclass(frozen=True)
 class ResultadoTelegram:
@@ -55,7 +61,7 @@ async def atender_mensaje_de_telegram(
             return ResultadoTelegram(atendido=False, perfil=perfil)
         try:
             audio = canal.descargar_voz(str(mensaje.voz_id))
-            dicho = stt.transcribir(audio, "nota.oga").texto
+            dicho = stt.transcribir(audio, NOMBRE_DE_NOTA_DE_VOZ).texto
         except (ErrorDeTranscripcion, OSError) as fallo:
             registro.warning("nota de voz no transcrita: %s", fallo)
             canal.enviar(mensaje.chat_id, SIN_VOZ)

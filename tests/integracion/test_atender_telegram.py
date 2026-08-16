@@ -147,6 +147,27 @@ async def test_el_plan_cambia_desde_telegram(repositorio: RepositorioPlan) -> No
     assert canal.enviados[0][1] == "Te bajé la carga de esta semana."
 
 
+async def test_la_nota_de_voz_se_nombra_como_groq_la_acepta(
+    repositorio: RepositorioPlan,
+) -> None:
+    """Groq valida por extensión: `.oga` de Telegram da 400, `.ogg` pasa."""
+
+    class STTQueMiraElNombre:
+        def __init__(self) -> None:
+            self.nombre = ""
+
+        def transcribir(self, audio: bytes, nombre_archivo: str) -> Transcripcion:
+            self.nombre = nombre_archivo
+            return Transcripcion(texto="ok")
+
+    espia = STTQueMiraElNombre()
+    mensaje = MensajeEntrante(id_actualizacion=9, chat_id=55, voz_id="AwACAgQ")
+
+    await correr(mensaje, LLMFalso(solo_texto("va")), CanalFalso(), repositorio, espia)
+
+    assert espia.nombre.endswith(".ogg")
+
+
 async def test_una_voz_que_no_se_transcribe_avisa(
     repositorio: RepositorioPlan,
 ) -> None:
