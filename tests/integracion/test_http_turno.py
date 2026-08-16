@@ -54,6 +54,10 @@ def _app_levantada(
     previo = dict(os.environ)
     os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{carpeta}/prueba.db"
     os.environ["CALENTAR_VOZ"] = "false"
+    # Sin llaves de Langfuse el composition root devuelve el objeto nulo. Si no,
+    # cada arranque abre un cliente real y hace flush contra la nube al cerrar.
+    os.environ["LANGFUSE_PUBLIC_KEY"] = ""
+    os.environ["LANGFUSE_SECRET_KEY"] = ""
 
     from pacer.interfaces.http import app as modulo
 

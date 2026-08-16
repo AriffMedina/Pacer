@@ -4,8 +4,10 @@ Cambiar de familia de modelos es cambiar `MODEL_ID` y nada más: ese es el
 argumento entero del ADR-003.
 """
 
+from pacer.domain.puertos.observabilidad import PuertoObservabilidad, SinObservabilidad
 from pacer.infrastructure.configuracion import Configuracion
 from pacer.infrastructure.llm.bedrock import AdaptadorBedrock
+from pacer.infrastructure.observabilidad.langfuse_trazas import ObservabilidadLangfuse
 from pacer.infrastructure.stt.groq_whisper import AdaptadorGroqWhisper
 from pacer.infrastructure.tts.polly import AdaptadorPolly
 
@@ -34,9 +36,30 @@ def configuracion() -> Configuracion:
     return Configuracion()
 
 
-def construir_llm(config: Configuracion | None = None) -> AdaptadorBedrock:
+def construir_observabilidad(
+    config: Configuracion | None = None,
+) -> PuertoObservabilidad:
+    """Sin llaves devuelve el objeto nulo: la app corre igual, sin trazas."""
     conf = config or configuracion()
-    return AdaptadorBedrock(model_id=MODEL_ID, region=conf.aws_region)
+    if not conf.observabilidad_disponible:
+        return SinObservabilidad()
+    return ObservabilidadLangfuse(
+        public_key=conf.langfuse_public_key,
+        secret_key=conf.langfuse_secret_key,
+        base_url=conf.langfuse_url,
+    )
+
+
+def construir_llm(
+    config: Configuracion | None = None,
+    observabilidad: PuertoObservabilidad | None = None,
+) -> AdaptadorBedrock:
+    conf = config or configuracion()
+    return AdaptadorBedrock(
+        model_id=MODEL_ID,
+        region=conf.aws_region,
+        observabilidad=observabilidad or construir_observabilidad(conf),
+    )
 
 
 def construir_stt(config: Configuracion | None = None) -> AdaptadorGroqWhisper | None:

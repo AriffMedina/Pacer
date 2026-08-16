@@ -29,6 +29,7 @@ from pacer.composition_root import (
     CORREDOR_PILOTO,
     configuracion,
     construir_llm,
+    construir_observabilidad,
     construir_stt,
     construir_tts,
 )
@@ -114,7 +115,8 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
         await conexion.run_sync(Base.metadata.create_all)
 
     app.state.fabrica = async_sessionmaker(motor, expire_on_commit=False)
-    app.state.llm = construir_llm(config)
+    app.state.trazas = construir_observabilidad(config)
+    app.state.llm = construir_llm(config, app.state.trazas)
     app.state.stt = construir_stt(config)
     app.state.tts = construir_tts(config)
 
@@ -122,6 +124,7 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
+    app.state.trazas.cerrar()
     await motor.dispose()
 
 
@@ -169,23 +172,42 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
         {"role": "user", "content": [{"text": transcripcion.texto}]}
     )
 
-    async with app.state.fabrica() as bd:
-        repositorio = RepositorioPlan(bd)
-        plan_previo = await repositorio.version_activa(CORREDOR_PILOTO)
-        sistema = construir_prompt(
-            construir_bloque(plan_previo, hoy=hoy, fecha_carrera=sesion.perfil.fecha_carrera)
-            if plan_previo and sesion.perfil.fecha_carrera
-            else None
-        )
+    # La traza del turno envuelve todo: las llamadas al modelo cuelgan de ella,
+    # así en Langfuse se ve una conversación y no llamadas sueltas.
+    with app.state.trazas.observar(
+        nombre="turno_hablado",
+        entrada={"transcripcion": transcripcion.texto},
+        metadatos={"corredor": CORREDOR_PILOTO, "ms_transcripcion": ms_stt},
+    ) as traza:
+        async with app.state.fabrica() as bd:
+            repositorio = RepositorioPlan(bd)
+            plan_previo = await repositorio.version_activa(CORREDOR_PILOTO)
+            sistema = construir_prompt(
+                construir_bloque(
+                    plan_previo, hoy=hoy, fecha_carrera=sesion.perfil.fecha_carrera
+                )
+                if plan_previo and sesion.perfil.fecha_carrera
+                else None
+            )
 
-        resultado = await atender_turno(
-            llm=app.state.llm,
-            repositorio=repositorio,
-            sistema=sistema,
-            mensajes=sesion.mensajes,
-            perfil=sesion.perfil,
-            corredor_id=CORREDOR_PILOTO,
-            hoy=hoy,
+            resultado = await atender_turno(
+                llm=app.state.llm,
+                repositorio=repositorio,
+                sistema=sistema,
+                mensajes=sesion.mensajes,
+                perfil=sesion.perfil,
+                corredor_id=CORREDOR_PILOTO,
+                hoy=hoy,
+            )
+
+        traza.registrar_salida(
+            {
+                "respuesta": resultado.texto,
+                "herramientas": list(resultado.herramientas_usadas),
+                "plan_version": resultado.plan.version if resultado.plan else None,
+                "motivo_cambio": resultado.plan.motivo_cambio if resultado.plan else None,
+                "vueltas": resultado.vueltas,
+            }
         )
 
     ms_total = int((time.perf_counter() - arranque) * 1000)
