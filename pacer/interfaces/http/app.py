@@ -88,6 +88,7 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
 
             repositorio = RepositorioPlan(bd)
             plan_previo = await repositorio.version_activa(corredor.id)
+            apuntadas = await agenda.todas(corredor.id)
             # El bloque se arma SIEMPRE: aunque no haya plan, el corredor puede
             # tener carreras apuntadas y el coach tiene que verlas.
             sistema = construir_prompt(
@@ -95,7 +96,7 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
                     plan_previo,
                     hoy=hoy,
                     fecha_carrera=corredor.perfil.fecha_carrera,
-                    carreras=await agenda.todas(corredor.id),
+                    carreras=apuntadas,
                     perfil=corredor.perfil,
                 )
             )
@@ -108,10 +109,12 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
                 perfil=corredor.perfil,
                 corredor_id=corredor.id,
                 hoy=hoy,
+                carreras=apuntadas,
             )
 
             for nueva in resultado.carreras_nuevas:
                 await agenda.agregar(corredor.id, nueva)
+            await _aplicar_agenda(agenda, corredor.id, resultado.acciones_agenda)
 
             await corredores.guardar_perfil(corredor.id, resultado.perfil)
             await corredores.recordar(corredor.id, "user", dicho, canal=canal)
@@ -130,6 +133,25 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
         )
 
     return resultado, _guardar_para_voz(resultado.texto)
+
+
+async def _aplicar_agenda(
+    agenda: RepositorioCarrera, corredor_id: int, acciones: tuple[Any, ...]
+) -> None:
+    """Aplica lo que el coach decidió sobre la agenda.
+
+    El bucle de conversación es puro y devuelve intenciones; ejecutarlas es
+    trabajo de esta capa. Un fallo aquí se registra y no rompe el turno: perder
+    la respuesta hablada por no poder mover una fecha sería peor.
+    """
+    for accion in acciones:
+        try:
+            if accion.tipo == "quitar":
+                await agenda.quitar(corredor_id, accion.carrera_id)
+            elif accion.tipo == "mover" and accion.nueva_fecha is not None:
+                await agenda.mover(corredor_id, accion.carrera_id, accion.nueva_fecha)
+        except Exception as fallo:  # noqa: BLE001 — la agenda no tumba el turno
+            registro.warning("no se pudo aplicar %s: %s", accion, fallo)
 
 
 def _respuesta(
@@ -244,6 +266,8 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
             )
 
             repositorio = RepositorioPlan(bd)
+            agenda = RepositorioCarrera(bd)
+            apuntadas = await agenda.todas(corredor.id)
             # Mismo estado que por la web. Antes Telegram recibía el prompt
             # pelado: ni fecha, ni plan, ni perfil. El mismo coach contestaba
             # cosas distintas según por dónde le hablaras.
@@ -252,7 +276,7 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
                     await repositorio.version_activa(corredor.id),
                     hoy=hoy,
                     fecha_carrera=corredor.perfil.fecha_carrera,
-                    carreras=await RepositorioCarrera(bd).todas(corredor.id),
+                    carreras=apuntadas,
                     perfil=corredor.perfil,
                 )
             )
@@ -268,9 +292,13 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
                 perfil=corredor.perfil,
                 corredor_id=corredor.id,
                 hoy=hoy,
+                carreras=apuntadas,
             )
 
             if resultado.atendido:
+                for nueva in resultado.carreras_nuevas:
+                    await agenda.agregar(corredor.id, nueva)
+                await _aplicar_agenda(agenda, corredor.id, resultado.acciones_agenda)
                 await corredores.guardar_perfil(corredor.id, resultado.perfil)
                 await corredores.recordar(
                     corredor.id,

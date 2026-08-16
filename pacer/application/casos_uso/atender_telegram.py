@@ -10,6 +10,8 @@ from datetime import date
 from typing import Any
 
 from pacer.application.casos_uso.atender_turno import atender_turno
+from pacer.application.casos_uso.conversar import AccionAgenda
+from pacer.domain.entidades.carrera import Carrera
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import PuertoLLM
 from pacer.domain.puertos.notificacion import MensajeEntrante, PuertoNotificacion
@@ -34,6 +36,8 @@ class ResultadoTelegram:
     dicho_por_el_corredor: str = ""
     respuesta: str = ""
     perfil: Perfil = field(default_factory=Perfil)
+    carreras_nuevas: tuple[Carrera, ...] = ()
+    acciones_agenda: tuple[AccionAgenda, ...] = ()
 
 
 async def atender_mensaje_de_telegram(
@@ -48,6 +52,7 @@ async def atender_mensaje_de_telegram(
     perfil: Perfil,
     corredor_id: int,
     hoy: date,
+    carreras: tuple[Carrera, ...] = (),
 ) -> ResultadoTelegram:
     """Atiende un mensaje entrante y contesta por el mismo chat."""
     if not mensaje.tiene_contenido:
@@ -81,6 +86,7 @@ async def atender_mensaje_de_telegram(
         perfil=perfil,
         corredor_id=corredor_id,
         hoy=hoy,
+        carreras=carreras,
     )
 
     historial[:] = resultado.mensajes
@@ -95,4 +101,6 @@ async def atender_mensaje_de_telegram(
         dicho_por_el_corredor=dicho,
         respuesta=resultado.texto,
         perfil=resultado.perfil,
+        carreras_nuevas=resultado.carreras_nuevas,
+        acciones_agenda=resultado.acciones_agenda,
     )

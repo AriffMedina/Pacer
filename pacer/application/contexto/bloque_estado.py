@@ -100,7 +100,9 @@ def _linea_carreras(
 
     partes = []
     for c in proximas:
-        trozos = [c.nombre]
+        # El id va delante: es lo que el coach usa para moverla o quitarla sin
+        # tener que adivinar a cuál se refiere el corredor.
+        trozos = [f"#{c.id} {c.nombre}" if c.id else c.nombre]
         if c.distancia_km is not None:
             trozos.append(f"{c.distancia_km} km, {como_se_entrena(c.distancia_km)}")
             categoria = categoria_de_km(c.distancia_km)

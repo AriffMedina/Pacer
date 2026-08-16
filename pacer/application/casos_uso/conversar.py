@@ -7,7 +7,7 @@ un modelo que insiste en llamar herramientas no puede colgar el turno.
 
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from pacer.application.casos_uso.crear_plan import crear_plan
 from pacer.application.contexto.fechas import interpretar_fecha
@@ -19,7 +19,7 @@ from pacer.domain.entidades.plan import Plan, Sensacion
 from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
 from pacer.domain.reglas.duracion import PlanImposible
 from pacer.domain.servicios.ajustador import ajustar
-from pacer.domain.servicios.categoria import como_se_entrena
+from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
 from pacer.domain.servicios.registro import registrar
 from pacer.domain.servicios.resolutor import resolver_sesion
 
@@ -64,6 +64,20 @@ CAMPOS_DE_PERFIL = (
 
 
 @dataclass(frozen=True)
+class AccionAgenda:
+    """Un cambio en la agenda que quien llama tiene que persistir.
+
+    El bucle de conversación es puro: decide QUÉ pasa con la agenda pero no
+    toca la base. Devolver la intención en vez de ejecutarla es lo que permite
+    probar todo esto sin levantar nada.
+    """
+
+    tipo: Literal["mover", "quitar"]
+    carrera_id: int
+    nueva_fecha: date | None = None
+
+
+@dataclass(frozen=True)
 class ResultadoTurno:
     texto: str
     perfil: Perfil
@@ -75,6 +89,9 @@ class ResultadoTurno:
     carreras_nuevas: tuple[Carrera, ...] = ()
     """Las que se apuntaron en este turno. Quien llama las persiste."""
 
+    acciones_agenda: tuple[AccionAgenda, ...] = ()
+    """Movimientos y bajas de la agenda. Quien llama las aplica."""
+
 
 def procesar_turno(
     llm: PuertoLLM,
@@ -84,12 +101,14 @@ def procesar_turno(
     *,
     hoy: date,
     plan: Plan | None = None,
+    carreras: tuple[Carrera, ...] = (),
     max_vueltas: int = MAX_VUELTAS,
 ) -> ResultadoTurno:
     """Corre el ciclo pedir-ejecutar-responder hasta que el modelo cierre el turno."""
     historial = list(mensajes)
     usadas: list[str] = []
     apuntadas: list[Carrera] = []
+    acciones: list[AccionAgenda] = []
     catalogo = catalogo_para_bedrock()
 
     for vuelta in range(1, max_vueltas + 1):
@@ -104,6 +123,7 @@ def procesar_turno(
                 herramientas_usadas=tuple(usadas),
                 plan=plan,
                 carreras_nuevas=tuple(apuntadas),
+                acciones_agenda=tuple(acciones),
             )
 
         historial.append(respuesta.mensaje)
@@ -126,6 +146,12 @@ def procesar_turno(
                     nueva, resultado = _apuntar_carrera(llamada.entrada)
                     if nueva is not None:
                         apuntadas.append(nueva)
+                elif llamada.nombre in ACCIONES_DE_AGENDA:
+                    perfil, accion, resultado = _tocar_agenda(
+                        llamada.nombre, llamada.entrada, carreras, perfil
+                    )
+                    if accion is not None:
+                        acciones.append(accion)
 
             resultados.append((llamada, resultado))
 
@@ -140,6 +166,7 @@ def procesar_turno(
                 herramientas_usadas=tuple(usadas),
                 plan=plan,
                 carreras_nuevas=tuple(apuntadas),
+                acciones_agenda=tuple(acciones),
             )
 
     # Nunca se devuelve texto vacío: desde el teléfono, silencio y error se ven
@@ -153,7 +180,87 @@ def procesar_turno(
         plan=plan,
         corto_por_limite=True,
         carreras_nuevas=tuple(apuntadas),
+        acciones_agenda=tuple(acciones),
     )
+
+
+ACCIONES_DE_AGENDA = frozenset(
+    {"mover_carrera", "quitar_carrera", "elegir_carrera_objetivo"}
+)
+
+
+def _tocar_agenda(
+    herramienta: str,
+    entrada: dict[str, Any],
+    carreras: tuple[Carrera, ...],
+    perfil: Perfil,
+) -> tuple[Perfil, AccionAgenda | None, dict[str, Any]]:
+    """Mover, quitar o elegir objetivo. Mantiene el perfil en sincronía.
+
+    El corredor pospone una carrera y hasta ahora el coach apuntaba una nueva
+    dejando la vieja: no era terquedad del modelo, es que no tenía con qué
+    moverla. Si la que se toca es la objetivo, la fecha del plan se mueve o se
+    limpia con ella, porque contar los días hacia una carrera borrada es peor
+    que no contar nada.
+    """
+    objetivo = next(
+        (c for c in carreras if c.id == entrada.get("carrera_id")), None
+    )
+    if objetivo is None:
+        return perfil, None, {
+            "error": "carrera_no_encontrada",
+            "como_seguir": "Dile cuáles tiene apuntadas y pregúntale a cuál se refiere.",
+        }
+
+    es_la_objetivo = (
+        perfil.fecha_carrera is not None and objetivo.fecha == perfil.fecha_carrera
+    )
+
+    if herramienta == "quitar_carrera":
+        if es_la_objetivo:
+            perfil = replace(perfil, fecha_carrera=None)
+        return (
+            perfil,
+            AccionAgenda(tipo="quitar", carrera_id=objetivo.id or 0),
+            {"ok": True, "quitada": objetivo.nombre, "era_la_objetivo": es_la_objetivo},
+        )
+
+    if herramienta == "mover_carrera":
+        nueva = interpretar_fecha(str(entrada.get("nueva_fecha", "")))
+        if nueva is None:
+            return perfil, None, {
+                "error": "fecha_no_entendida",
+                "como_seguir": "Pregúntale el día, el mes y el año.",
+            }
+        if es_la_objetivo:
+            perfil = replace(perfil, fecha_carrera=nueva)
+        return (
+            perfil,
+            AccionAgenda(tipo="mover", carrera_id=objetivo.id or 0, nueva_fecha=nueva),
+            {"ok": True, "movida": objetivo.nombre, "nueva_fecha": nueva.isoformat()},
+        )
+
+    # elegir_carrera_objetivo
+    if objetivo.distancia_km is None:
+        return perfil, None, {
+            "error": "sin_distancia",
+            "como_seguir": "Pregúntale de cuántos kilómetros es esa carrera.",
+        }
+
+    categoria = categoria_de_km(objetivo.distancia_km)
+    if categoria is None:
+        return perfil, None, {
+            "error": "distancia_no_cubierta",
+            "razon_para_explicar": como_se_entrena(objetivo.distancia_km),
+        }
+
+    perfil = replace(perfil, objetivo=categoria, fecha_carrera=objetivo.fecha)
+    return perfil, None, {
+        "ok": True,
+        "carrera": objetivo.nombre,
+        "objetivo": categoria,
+        "fecha_carrera": objetivo.fecha.isoformat(),
+    }
 
 
 def _apuntar_carrera(entrada: dict[str, Any]) -> tuple[Carrera | None, dict[str, Any]]:
@@ -229,12 +336,14 @@ def _generar(
         "semanas": len(nuevo.semanas),
         "km_primera_semana": nuevo.semanas[0].km_total,
         "km_pico": max(semana.km_total for semana in de_carga),
+        # Siempre, aunque sea hoy: sin este dato el modelo preguntaba "¿cuándo
+        # quieres que empiece?" por algo que ya estaba decidido.
+        "empieza_el": arranque.isoformat(),
     }
 
     # Cuando la carrera está muy lejos el plan no empieza hoy: empieza cuando
     # toca. Decírselo evita que el corredor abra la app mañana y no vea nada.
     if arranque > hoy:
-        resultado["empieza_el"] = arranque.isoformat()
         resultado["que_hacer_mientras"] = (
             "El plan YA ESTÁ y el corredor puede verlo entero en la app desde "
             "ahora; lo que empieza en esa fecha es el entrenamiento. NO le "

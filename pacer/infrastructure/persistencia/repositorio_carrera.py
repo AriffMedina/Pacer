@@ -1,5 +1,6 @@
 """Repositorio de las carreras apuntadas."""
 
+from datetime import date
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, select
@@ -55,6 +56,16 @@ class RepositorioCarrera:
         )
         fila = (await self._sesion.execute(consulta)).scalar_one()
         return _a_dominio(fila)
+
+    async def mover(self, corredor_id: int, carrera_id: int, nueva: date) -> bool:
+        """Cambia la fecha de una carrera. Devuelve si existía."""
+        fila = await self._sesion.get(CarreraORM, carrera_id)
+        if fila is None or fila.corredor_id != corredor_id:
+            return False
+
+        fila.fecha = nueva
+        await self._sesion.commit()
+        return True
 
     async def quitar(self, corredor_id: int, carrera_id: int) -> bool:
         """Borra una carrera del corredor. Devuelve si existía.

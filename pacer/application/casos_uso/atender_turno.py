@@ -8,6 +8,7 @@ from datetime import date
 from typing import Any
 
 from pacer.application.casos_uso.conversar import ResultadoTurno, procesar_turno
+from pacer.domain.entidades.carrera import Carrera
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import PuertoLLM
 from pacer.domain.puertos.repositorio import PuertoRepositorioPlan
@@ -21,11 +22,14 @@ async def atender_turno(
     perfil: Perfil,
     corredor_id: int,
     hoy: date,
+    carreras: tuple[Carrera, ...] = (),
 ) -> ResultadoTurno:
     """Carga el plan activo, procesa el turno y guarda si el plan cambió."""
     previo = await repositorio.version_activa(corredor_id)
 
-    resultado = procesar_turno(llm, sistema, mensajes, perfil, hoy=hoy, plan=previo)
+    resultado = procesar_turno(
+        llm, sistema, mensajes, perfil, hoy=hoy, plan=previo, carreras=carreras
+    )
 
     if _hay_algo_que_guardar(previo, resultado):
         assert resultado.plan is not None

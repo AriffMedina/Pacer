@@ -82,11 +82,41 @@ class ApuntarCarrera(BaseModel):
     )
 
 
+class MoverCarrera(BaseModel):
+    """Úsala para CAMBIAR LA FECHA de una carrera que ya está apuntada.
+
+    Si el corredor pospone una carrera, MUÉVELA. No apuntes una nueva: se
+    quedarían las dos y su agenda dejaría de ser cierta.
+    """
+
+    carrera_id: int = Field(description="El número que aparece como #N en la lista.")
+    nueva_fecha: str = Field(description="Fecha en formato ISO AAAA-MM-DD.")
+
+
+class QuitarCarrera(BaseModel):
+    """Úsala cuando el corredor ya no vaya a correr una carrera apuntada."""
+
+    carrera_id: int = Field(description="El número que aparece como #N en la lista.")
+
+
+class ElegirCarreraObjetivo(BaseModel):
+    """Úsala cuando el corredor decida para qué carrera quiere entrenar.
+
+    Guarda la meta y la fecha de una sola vez, tomándolas de la carrera. No
+    hace falta que copies la distancia ni la fecha a mano.
+    """
+
+    carrera_id: int = Field(description="El número que aparece como #N en la lista.")
+
+
 HERRAMIENTAS: dict[str, type[BaseModel]] = {
     "actualizar_perfil": ActualizarPerfil,
     "registrar_sesion": RegistrarSesion,
     "generar_plan": GenerarPlan,
     "apuntar_carrera": ApuntarCarrera,
+    "mover_carrera": MoverCarrera,
+    "quitar_carrera": QuitarCarrera,
+    "elegir_carrera_objetivo": ElegirCarreraObjetivo,
 }
 
 
