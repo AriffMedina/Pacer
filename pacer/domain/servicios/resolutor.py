@@ -61,6 +61,13 @@ def _interpretar_fecha(pista: str, hoy: date) -> date | None:
     """Traduce una pista en español a una fecha concreta, o None si no se entiende."""
     texto = pista.strip().lower()
 
+    # El modelo a veces manda la fecha ya resuelta en ISO en vez de la pista
+    # hablada. Rechazarla obligaría a una vuelta más de conversación por nada.
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        pass
+
     # De más larga a más corta: "ayer" es substring de "anteayer" y ganaría
     # la coincidencia equivocada.
     for palabra in sorted(DESPLAZAMIENTOS, key=len, reverse=True):

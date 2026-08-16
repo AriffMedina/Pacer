@@ -14,6 +14,16 @@ def sesion(dia: int, tipo: str = "facil", km: float = 6.0) -> Sesion:
     return Sesion(fecha=date(2026, 8, dia), tipo=tipo, km=km)  # type: ignore[arg-type]
 
 
+def test_acepta_la_fecha_ya_resuelta_en_iso() -> None:
+    """El modelo a veces manda la fecha en vez de la pista hablada."""
+    plan = plan_con(sesion(19), sesion(20))
+
+    resultado = resolver_sesion(plan, "2026-08-19", hoy=HOY)
+
+    assert resultado.sesion is not None
+    assert resultado.sesion.fecha == date(2026, 8, 19)
+
+
 def test_ayer_resuelve_la_sesion_del_dia_anterior() -> None:
     plan = plan_con(sesion(19), sesion(20))
 

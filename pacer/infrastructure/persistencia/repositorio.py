@@ -18,6 +18,26 @@ class RepositorioPlan:
         self._sesion = sesion
 
     async def guardar(self, plan: Plan, corredor_id: int) -> None:
+        """Inserta una versión nueva, o reescribe la que ya existe.
+
+        Versionar sigue siendo la regla para los CAMBIOS de plan. Pero dentro de
+        una misma versión hay hechos que se acumulan —una sesión reportada como
+        `normal` marca `completada` sin crear una v2— y esos también tienen que
+        persistir. Antes se descartaban en silencio: el turno reportaba `ok` al
+        modelo y nada llegaba a la base.
+        """
+        existente = await self._sesion.execute(
+            select(PlanORM).where(
+                PlanORM.corredor_id == corredor_id,
+                PlanORM.version == plan.version,
+            )
+        )
+        fila = existente.scalar_one_or_none()
+
+        if fila is not None:
+            await self._sesion.delete(fila)
+            await self._sesion.flush()
+
         self._sesion.add(_a_orm(plan, corredor_id))
         await self._sesion.commit()
 

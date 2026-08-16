@@ -96,6 +96,71 @@ async def test_el_ajuste_deja_dos_filas_en_la_base(
     assert "muy_dura" in str(versiones[1].motivo_cambio)
 
 
+async def test_una_sesion_sin_ajuste_igual_se_persiste(
+    repositorio: RepositorioPlan,
+) -> None:
+    """Reportar `pesada` no crea una v2, pero SÍ marca la sesión completada.
+
+    Antes solo se guardaba cuando subía la versión, así que estos reportes se
+    perdían: el turno le decía `ok` al modelo y nada llegaba a la base.
+    """
+    await atender_turno(
+        LLMFalso(con_llamada("generar_plan", {}), solo_texto("ok")),
+        repositorio,
+        "sistema",
+        dicho("hazme el plan"),
+        PERFIL,
+        CORREDOR,
+        HOY,
+    )
+    plan = await repositorio.version_activa(CORREDOR)
+    assert plan is not None
+    fecha = plan.semanas[0].sesiones[0].fecha
+
+    await atender_turno(
+        LLMFalso(
+            con_llamada(
+                "registrar_sesion",
+                {"pista_temporal": fecha.isoformat(), "km": 6.0, "sensacion": "pesada"},
+            ),
+            solo_texto("Anotado."),
+        ),
+        repositorio,
+        "sistema",
+        dicho("estuvo pesado"),
+        PERFIL,
+        CORREDOR,
+        HOY,
+    )
+
+    guardado = await repositorio.version_activa(CORREDOR)
+    assert guardado is not None
+    assert guardado.version == 1
+    reportada = next(s for s in guardado.semanas[0].sesiones if s.fecha == fecha)
+    assert reportada.completada
+    assert reportada.sensacion == "pesada"
+
+
+async def test_guardar_la_misma_version_no_duplica_filas(
+    repositorio: RepositorioPlan,
+) -> None:
+    await atender_turno(
+        LLMFalso(con_llamada("generar_plan", {}), solo_texto("ok")),
+        repositorio,
+        "sistema",
+        dicho("plan"),
+        PERFIL,
+        CORREDOR,
+        HOY,
+    )
+    plan = await repositorio.version_activa(CORREDOR)
+    assert plan is not None
+
+    await repositorio.guardar(plan, corredor_id=CORREDOR)
+
+    assert [p.version for p in await repositorio.versiones(CORREDOR)] == [1]
+
+
 async def test_una_conversacion_sin_plan_no_escribe_nada(
     repositorio: RepositorioPlan,
 ) -> None:
