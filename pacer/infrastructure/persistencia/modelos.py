@@ -65,8 +65,14 @@ class CarreraORM(Base):
     corredor_id: Mapped[int] = mapped_column(ForeignKey("corredor.id"), index=True)
     fecha: Mapped[date] = mapped_column(index=True)
     nombre: Mapped[str]
-    distancia: Mapped[str | None] = mapped_column(default=None)
+    distancia_km: Mapped[float | None] = mapped_column(default=None)
     nota: Mapped[str] = mapped_column(default="")
+
+    # Se guardaba la distancia como texto ("21k", "15 k", "maraton"). No se
+    # podía razonar sobre eso, así que ahora son kilómetros. La columna vieja
+    # se conserva solo para leer las filas escritas antes; ya nadie escribe en
+    # ella y se puede tirar en cuanto haya migraciones de verdad.
+    distancia: Mapped[str | None] = mapped_column(default=None)
 
 
 class ConversacionORM(Base):

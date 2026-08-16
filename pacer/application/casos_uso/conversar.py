@@ -19,6 +19,7 @@ from pacer.domain.entidades.plan import Plan, Sensacion
 from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
 from pacer.domain.reglas.duracion import PlanImposible
 from pacer.domain.servicios.ajustador import ajustar
+from pacer.domain.servicios.categoria import como_se_entrena
 from pacer.domain.servicios.registro import registrar
 from pacer.domain.servicios.resolutor import resolver_sesion
 
@@ -32,7 +33,11 @@ TEXTO_DE_RESPALDO = "Perdón, se me enredó eso. ¿Me lo repites?"
 #
 # `generar_plan` y `registrar_sesion` NO entran acá: sus resultados traen
 # números y motivos que el modelo no puede haber sabido antes de llamarlas.
-SIN_NADA_NUEVO_QUE_CONTAR = frozenset({"actualizar_perfil", "apuntar_carrera"})
+#
+# `apuntar_carrera` SÍ aporta: devuelve con qué plan se entrena esa distancia,
+# y eso el modelo no lo sabe. Sin ese viaje de vuelta acabó diciendo que no
+# podía hacer planes de 5 km justo después de aceptar una carrera de 3.5.
+SIN_NADA_NUEVO_QUE_CONTAR = frozenset({"actualizar_perfil"})
 
 SENSACIONES_VALIDAS: tuple[Sensacion, ...] = (
     "facil",
@@ -162,13 +167,27 @@ def _apuntar_carrera(entrada: dict[str, Any]) -> tuple[Carrera | None, dict[str,
     if not nombre:
         return None, {"error": "falta_el_nombre"}
 
+    km = entrada.get("distancia_km")
     carrera = Carrera(
         fecha=fecha,
         nombre=nombre,
-        distancia=(entrada.get("distancia") or None),
+        distancia_km=float(km) if km else None,
         nota=str(entrada.get("nota") or ""),
     )
-    return carrera, {"ok": True, "fecha": fecha.isoformat(), "nombre": nombre}
+
+    resultado: dict[str, Any] = {
+        "ok": True,
+        "fecha": fecha.isoformat(),
+        "nombre": nombre,
+    }
+    if carrera.distancia_km is not None:
+        # Se le devuelve con qué plan se entrena para que no tenga que
+        # deducirlo. Deduciéndolo es como acabó diciendo que no podía hacer
+        # planes de 5 km justo después de reconocer una carrera de 3.5.
+        resultado["distancia_km"] = carrera.distancia_km
+        resultado["como_se_entrena"] = como_se_entrena(carrera.distancia_km)
+
+    return carrera, resultado
 
 
 def _generar(perfil: Perfil, hoy: date) -> tuple[Plan | None, dict[str, Any]]:

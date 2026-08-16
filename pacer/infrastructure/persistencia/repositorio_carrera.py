@@ -34,7 +34,7 @@ class RepositorioCarrera:
             corredor_id=corredor_id,
             fecha=carrera.fecha,
             nombre=carrera.nombre,
-            distancia=carrera.distancia,
+            distancia_km=carrera.distancia_km,
             nota=carrera.nota,
         )
         self._sesion.add(fila)
@@ -77,6 +77,31 @@ def _a_dominio(fila: CarreraORM) -> Carrera:
         id=fila.id,
         fecha=fila.fecha,
         nombre=fila.nombre,
-        distancia=fila.distancia,
+        distancia_km=fila.distancia_km
+        if fila.distancia_km is not None
+        else _km_del_texto_viejo(fila.distancia),
         nota=fila.nota,
     )
+
+
+# Distancias que se guardaron como texto antes de que fueran kilómetros.
+TEXTO_VIEJO = {"5k": 5.0, "10k": 10.0, "21k": 21.1, "maraton": 42.2, "maratón": 42.2}
+
+
+def _km_del_texto_viejo(texto: str | None) -> float | None:
+    """Rescata la distancia de las filas escritas cuando era texto libre.
+
+    Es compatibilidad hacia atrás, no una función de negocio: en cuanto esas
+    filas se reescriban, esto y la columna vieja se van juntas.
+    """
+    if not texto:
+        return None
+
+    limpio = texto.strip().lower()
+    if limpio in TEXTO_VIEJO:
+        return TEXTO_VIEJO[limpio]
+
+    try:
+        return float(limpio.removesuffix("km").removesuffix("k").strip())
+    except ValueError:
+        return None

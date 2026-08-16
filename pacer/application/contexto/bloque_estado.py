@@ -9,6 +9,7 @@ from datetime import date
 
 from pacer.domain.entidades.carrera import Carrera, pendientes
 from pacer.domain.entidades.plan import Plan, Semana, Sesion
+from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
 
 DIAS = (
     "lunes",
@@ -70,27 +71,49 @@ def construir_bloque(
         lineas.append(f"HOY: {_fecha_hablada(hoy)} · todavía no hay plan")
 
     if carreras:
-        lineas.append(_linea_carreras(carreras, hoy))
+        lineas.append(_linea_carreras(carreras, hoy, fecha_carrera))
 
     return "\n".join(lineas)
 
 
-def _linea_carreras(carreras: tuple[Carrera, ...], hoy: date) -> str:
-    """Las carreras apuntadas, con los días que faltan ya calculados.
+def _linea_carreras(
+    carreras: tuple[Carrera, ...], hoy: date, fecha_carrera: date | None
+) -> str:
+    """Las carreras apuntadas, ya masticadas para el modelo.
 
-    El modelo no resta fechas: se equivoca, y una cuenta regresiva mal dicha
-    destruye la confianza más rápido que cualquier otra cosa.
+    Van los días que faltan YA CALCULADOS —el modelo restando fechas se
+    equivoca, y una cuenta regresiva mal dicha destruye la confianza— y va con
+    qué plan se entrena cada distancia, para que no tenga que deducirlo.
+    También va CUÁL es la objetivo: sin eso no sabía para cuál estaba
+    entrenando y la conversación se volvía un interrogatorio.
     """
     proximas = pendientes(carreras, hoy)
     if not proximas:
         return "CARRERAS APUNTADAS: ninguna próxima"
 
-    partes = [
-        f"{c.nombre} ({c.distancia or 'sin distancia'}) el {_fecha_hablada(c.fecha)}, "
-        f"faltan {(c.fecha - hoy).days} días"
-        for c in proximas
-    ]
-    return "CARRERAS APUNTADAS: " + " · ".join(partes)
+    partes = []
+    for c in proximas:
+        trozos = [c.nombre]
+        if c.distancia_km is not None:
+            trozos.append(f"{c.distancia_km} km, {como_se_entrena(c.distancia_km)}")
+            categoria = categoria_de_km(c.distancia_km)
+            if categoria:
+                trozos.append(f'objetivo="{categoria}"')
+        trozos.append(f"el {_fecha_hablada(c.fecha)}")
+        trozos.append(f"faltan {(c.fecha - hoy).days} días")
+        if fecha_carrera is not None and c.fecha == fecha_carrera:
+            trozos.append("ES LA CARRERA OBJETIVO, el plan es para esta")
+        partes.append(" (" .join([trozos[0], ", ".join(trozos[1:])]) + ")")
+
+    cabeza = "CARRERAS APUNTADAS: " + " · ".join(partes)
+
+    if fecha_carrera is None or not any(c.fecha == fecha_carrera for c in proximas):
+        return (
+            cabeza
+            + "\nNINGUNA ES TODAVÍA LA OBJETIVO: pregúntale para cuál quiere el "
+            'plan y guarda su objetivo="..." y su fecha con actualizar_perfil.'
+        )
+    return cabeza
 
 
 def _fecha_hablada(fecha: date) -> str:

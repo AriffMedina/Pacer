@@ -68,8 +68,14 @@ class ApuntarCarrera(BaseModel):
             "antes de llamar esta herramienta."
         )
     )
-    distancia: str | None = Field(
-        None, max_length=20, description="Por ejemplo: 5k, 10k, 21k, maraton, 15k"
+    distancia_km: float | None = Field(
+        None,
+        gt=0,
+        le=200,
+        description=(
+            "Distancia en KILÓMETROS, como número. Un 10K es 10, un medio "
+            "maratón 21.1, un maratón 42.2. Vale cualquier distancia."
+        ),
     )
     nota: str | None = Field(
         None, max_length=200, description="Lo que el corredor quiera recordar de ella."

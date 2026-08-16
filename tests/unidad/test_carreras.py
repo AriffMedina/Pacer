@@ -1,5 +1,6 @@
 """Las carreras de la agenda: apuntarlas hablando y que el coach las vea."""
 
+import json
 from datetime import date
 from typing import Any
 
@@ -22,6 +23,11 @@ class LLMDeMentira:
         self, sistema: str, mensajes: list[dict[str, Any]], herramientas: dict[str, Any]
     ) -> RespuestaLLM:
         return self._respuestas.pop(0)
+
+
+def linea_de_carreras(bloque: str) -> str:
+    """Solo la línea de carreras. El resto del bloque tiene sus propios ' · '."""
+    return next(l for l in bloque.splitlines() if l.startswith("CARRERAS APUNTADAS:"))
 
 
 def pide_apuntar(**entrada: Any) -> RespuestaLLM:
@@ -63,8 +69,13 @@ def test_la_carrera_de_hoy_sigue_siendo_pendiente() -> None:
 def test_el_coach_apunta_una_carrera_que_le_dictan() -> None:
     llm = LLMDeMentira(
         pide_apuntar(
-            nombre="Maratón CDMX", fecha="2026-12-06", distancia="maraton", nota="Meta 4h"
-        )
+            nombre="Maratón CDMX", fecha="2026-12-06", distancia_km=42.2, nota="Meta 4h"
+        ),
+        RespuestaLLM(
+            texto="Listo, ya está apuntada.",
+            llamadas=(),
+            mensaje={"role": "assistant", "content": [{"text": "Listo."}]},
+        ),
     )
 
     resultado = procesar_turno(llm, "sistema", [], Perfil(), hoy=HOY)
@@ -73,15 +84,48 @@ def test_el_coach_apunta_una_carrera_que_le_dictan() -> None:
     apuntada = resultado.carreras_nuevas[0]
     assert apuntada.nombre == "Maratón CDMX"
     assert apuntada.fecha == date(2026, 12, 6)
+    assert apuntada.distancia_km == 42.2
     assert apuntada.nota == "Meta 4h"
 
 
 def test_acepta_la_fecha_como_la_diria_una_persona() -> None:
-    llm = LLMDeMentira(pide_apuntar(nombre="Carrera del pueblo", fecha="6 de diciembre de 2026"))
+    llm = LLMDeMentira(
+        pide_apuntar(nombre="Carrera del pueblo", fecha="6 de diciembre de 2026"),
+        RespuestaLLM(
+            texto="Apuntada.",
+            llamadas=(),
+            mensaje={"role": "assistant", "content": [{"text": "Apuntada."}]},
+        ),
+    )
 
     resultado = procesar_turno(llm, "sistema", [], Perfil(), hoy=HOY)
 
     assert resultado.carreras_nuevas[0].fecha == date(2026, 12, 6)
+
+
+def test_al_apuntar_le_devuelve_al_modelo_con_que_plan_se_entrena() -> None:
+    """El bug reportado: apuntó una carrera de 3.5 km y a renglón seguido dijo
+    que no podía hacer planes de 5 km. No lo sabía porque nadie se lo dijo."""
+    capturados: list[dict[str, Any]] = []
+
+    class Espia(LLMDeMentira):
+        def conversar(self, sistema, mensajes, herramientas):  # type: ignore[no-untyped-def]
+            capturados.append({"mensajes": list(mensajes)})
+            return super().conversar(sistema, mensajes, herramientas)
+
+    llm = Espia(
+        pide_apuntar(nombre="Carrera azul", fecha="2026-09-12", distancia_km=3.5),
+        RespuestaLLM(
+            texto="La Carrera azul de 3.5 km la preparamos como un 5K.",
+            llamadas=(),
+            mensaje={"role": "assistant", "content": [{"text": "ok"}]},
+        ),
+    )
+
+    procesar_turno(llm, "sistema", [], Perfil(), hoy=HOY)
+
+    devuelto = json.dumps(capturados[-1]["mensajes"], default=str)
+    assert "se entrena como un 5K" in devuelto
 
 
 def test_una_fecha_que_no_se_entiende_no_apunta_nada() -> None:
@@ -121,14 +165,64 @@ def test_el_bloque_de_estado_lista_las_carreras_con_los_dias_ya_contados() -> No
     """El modelo no resta fechas: se equivoca, y una cuenta regresiva mal dicha
     destruye la confianza más rápido que cualquier otra cosa."""
     carreras = (
-        Carrera(fecha=date(2026, 9, 5), nombre="Medio de Toluca", distancia="21k"),
+        Carrera(fecha=date(2026, 9, 5), nombre="Medio de Toluca", distancia_km=21.1),
     )
 
     bloque = construir_bloque(hoy=HOY, carreras=carreras)
 
     assert "Medio de Toluca" in bloque
-    assert "21k" in bloque
+    assert "21.1 km" in bloque
     assert "faltan 16 días" in bloque
+
+
+def test_el_bloque_dice_con_que_plan_se_entrena_cada_distancia() -> None:
+    """Sin esto el modelo tiene que deducirlo, y deduciendo se contradijo."""
+    carreras = (Carrera(fecha=date(2026, 9, 12), nombre="Carrera azul", distancia_km=3.5),)
+
+    bloque = construir_bloque(hoy=HOY, carreras=carreras)
+
+    assert "se entrena como un 5K" in bloque
+    assert 'objetivo="5k"' in bloque
+
+
+def test_el_bloque_marca_cual_es_la_carrera_objetivo() -> None:
+    """Con varias apuntadas y ninguna marcada, el coach preguntaba en círculos."""
+    carreras = (
+        Carrera(fecha=date(2026, 9, 12), nombre="Carrera azul", distancia_km=3.5),
+        Carrera(fecha=date(2026, 12, 6), nombre="Maratón CDMX", distancia_km=42.2),
+    )
+
+    bloque = construir_bloque(
+        hoy=HOY, carreras=carreras, fecha_carrera=date(2026, 9, 12)
+    )
+
+    azul, maraton = linea_de_carreras(bloque).split(" · ")
+    assert "ES LA CARRERA OBJETIVO" in azul
+    assert "ES LA CARRERA OBJETIVO" not in maraton
+
+
+def test_si_ninguna_es_la_objetivo_le_dice_que_pregunte() -> None:
+    carreras = (
+        Carrera(fecha=date(2026, 9, 12), nombre="Carrera azul", distancia_km=3.5),
+        Carrera(fecha=date(2026, 12, 6), nombre="Maratón CDMX", distancia_km=42.2),
+    )
+
+    bloque = construir_bloque(hoy=HOY, carreras=carreras)
+
+    assert "NINGUNA ES TODAVÍA LA OBJETIVO" in bloque
+
+
+def test_una_distancia_que_no_se_cubre_se_dice_en_el_bloque() -> None:
+    """Un 100k no se entrena con el plan de maratón. El coach tiene que poder
+    decirlo sin inventarse el motivo."""
+    carreras = (Carrera(fecha=date(2026, 9, 5), nombre="Ultra", distancia_km=100.0),)
+
+    bloque = construir_bloque(hoy=HOY, carreras=carreras)
+
+    entrada = linea_de_carreras(bloque)
+    assert "no la cubro" in entrada
+    # No se le ofrece un objetivo que guardar: no hay plan para esa distancia.
+    assert "objetivo=" not in entrada
 
 
 def test_el_coach_ve_las_carreras_aunque_todavia_no_haya_plan() -> None:

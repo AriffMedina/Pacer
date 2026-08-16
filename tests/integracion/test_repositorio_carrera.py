@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pacer.domain.entidades.carrera import Carrera
+from pacer.infrastructure.persistencia.modelos import CarreraORM
 from pacer.infrastructure.persistencia.repositorio_carrera import RepositorioCarrera
 
 CORREDOR = 1
@@ -11,7 +12,7 @@ OTRO = 2
 
 def carrera(dia: int = 6, nombre: str = "Maratón CDMX") -> Carrera:
     return Carrera(
-        fecha=date(2026, 12, dia), nombre=nombre, distancia="maraton", nota="Meta: 4h"
+        fecha=date(2026, 12, dia), nombre=nombre, distancia_km=42.2, nota="Meta: 4h"
     )
 
 
@@ -41,6 +42,39 @@ async def test_apuntar_la_misma_dos_veces_no_la_duplica(
 
     assert primera.id == segunda.id
     assert len(await repositorio.todas(CORREDOR)) == 1
+
+
+async def test_guarda_la_distancia_como_kilometros(sesion_bd: AsyncSession) -> None:
+    """Cualquier distancia, no solo las cuatro oficiales."""
+    repositorio = RepositorioCarrera(sesion_bd)
+
+    await repositorio.agregar(
+        CORREDOR, Carrera(fecha=date(2026, 9, 12), nombre="Carrera azul", distancia_km=3.5)
+    )
+
+    assert (await repositorio.todas(CORREDOR))[0].distancia_km == 3.5
+
+
+async def test_rescata_la_distancia_de_las_filas_viejas(
+    sesion_bd: AsyncSession,
+) -> None:
+    """Las carreras guardadas cuando la distancia era texto libre siguen
+    sirviendo: sin esto, quien ya tenía carreras las vería sin distancia y sin
+    plan asociado."""
+    sesion_bd.add(
+        CarreraORM(
+            corredor_id=CORREDOR,
+            fecha=date(2026, 10, 25),
+            nombre="Medio viejo",
+            distancia="21k",
+            distancia_km=None,
+        )
+    )
+    await sesion_bd.commit()
+
+    recuperada = (await RepositorioCarrera(sesion_bd).todas(CORREDOR))[0]
+
+    assert recuperada.distancia_km == 21.1
 
 
 async def test_las_devuelve_ordenadas_por_fecha(sesion_bd: AsyncSession) -> None:

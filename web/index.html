@@ -409,6 +409,31 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .aviso{font-size:12.5px;color:#FF8A8A;margin-top:9px;display:none}
 .aviso.on{display:block}
 
+/* La distancia es un número con su unidad pegada: "15k", "15 k" y "15km" eran
+   la misma carrera escrita de tres formas y el sistema no podía razonar. */
+.con-unidad{position:relative;display:flex;align-items:center}
+.con-unidad input{padding-right:38px}
+.con-unidad input::-webkit-outer-spin-button,
+.con-unidad input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.con-unidad span{position:absolute;right:14px;font-size:13px;color:var(--texto-3);
+  pointer-events:none;font-family:'JetBrains Mono',monospace}
+.atajos{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.atajo{padding:7px 13px;border-radius:99px;border:1px solid var(--linea-fuerte);
+  font-size:12.5px;color:var(--texto-2)}
+.atajo:hover,.atajo.puesto{color:var(--acento);border-color:rgba(198,249,74,.4)}
+/* Traduce la distancia al plan que le toca, en el momento de escribirla. Es
+   lo que evita la sorpresa de apuntar 3.5 km y que luego "no haya plan". */
+.como{font-size:12.5px;color:var(--acento);min-height:18px;margin-bottom:2px}
+.como.fuera{color:#FF8A8A}
+
+.insignia{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;
+  background:var(--lima-suave);border:1px solid rgba(198,249,74,.35);
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;
+  color:var(--acento);vertical-align:middle;margin-left:8px}
+.elegir{padding:7px 13px;border-radius:99px;border:1px solid var(--linea-fuerte);
+  font-size:12px;color:var(--texto-2);white-space:nowrap}
+.elegir:hover{color:var(--acento);border-color:rgba(198,249,74,.4)}
+
 .encabezado-hoja{display:flex;align-items:center;justify-content:space-between;
   gap:12px;margin:2px 0 14px}
 
@@ -1260,6 +1285,7 @@ function devolverBorrador(borrador){
   $('#c-nombre').value = borrador.nombre;
   $('#c-distancia').value = borrador.distancia;
   $('#c-nota').value = borrador.nota;
+  traducirDistancia();
 
   const campo = borrador.enfocado && $('#' + borrador.enfocado);
   if (campo){
@@ -1301,8 +1327,17 @@ function pintarAgenda(){
       <p class="titulo" id="forma-titulo">Nueva carrera</p>
       <div class="campos">
         <input id="c-nombre" placeholder="Nombre de la carrera" maxlength="80" autocomplete="off">
-        <input id="c-distancia" placeholder="10k, 21k, maratón…" maxlength="20" autocomplete="off">
+        <div class="con-unidad">
+          <input id="c-distancia" type="number" step="0.1" min="0.1" max="200"
+                 inputmode="decimal" placeholder="Distancia" autocomplete="off">
+          <span>km</span>
+        </div>
       </div>
+      <div class="atajos">
+        ${[['5K',5],['10K',10],['Medio',21.1],['Maratón',42.2]].map(([t,k]) =>
+          `<button type="button" class="atajo" data-km="${k}">${t}</button>`).join('')}
+      </div>
+      <p class="como" id="c-como"></p>
       <textarea id="c-nota" rows="2" placeholder="Notas: meta de tiempo, con quién vas, lo que quieras" maxlength="200"></textarea>
       <p class="aviso" id="c-aviso"></p>
       <div class="pie">
@@ -1322,6 +1357,13 @@ function pintarAgenda(){
   $('#mes-hoy').onclick = () => { mesVisible = new Date(hoy.getFullYear(), hoy.getMonth(), 1); pintarAgenda(); };
   $('#btn-nueva').onclick = () => abrirForma(datos.hoy, true);
   $('#c-guardar').onclick = guardarCarrera;
+  $('#c-distancia').oninput = traducirDistancia;
+  document.querySelectorAll('#v-agenda .atajo').forEach((b) => {
+    b.onclick = () => { $('#c-distancia').value = b.dataset.km; traducirDistancia(); };
+  });
+  document.querySelectorAll('#v-agenda .elegir').forEach((b) => {
+    b.onclick = () => elegirObjetivo(Number(b.dataset.id));
+  });
 
   document.querySelectorAll('#v-agenda .dia[data-fecha]').forEach((d) => {
     d.onclick = () => abrirForma(d.dataset.fecha, true);
@@ -1368,17 +1410,35 @@ function celdas(mes, hoy, porDia, carrerasPorDia){
   return html;
 }
 
-function listaDeCarreras(hoy){
-  const propias = carreras.map((c) => ({...c, objetivo:false}));
-  // La del perfil se muestra aunque no esté en la tabla: es la que se entrena.
-  if (datos.fecha_carrera && !carreras.some((c) => c.fecha === datos.fecha_carrera)){
-    propias.push({
-      id:null, objetivo:true, fecha:datos.fecha_carrera,
-      nombre:'Tu carrera objetivo', distancia:datos.objetivo, nota:'',
-    });
-  }
+/* Traduce kilómetros a plan mientras se escribe. La regla vive en el dominio;
+   esto es una copia mínima para dar respuesta inmediata sin ir al servidor, y
+   el servidor sigue siendo el que manda al guardar. */
+function planDe(km){
+  if (!(km > 0)) return null;
+  if (km < 2) return {texto:'Es una prueba de pista, no de fondo: no la cubro.', fuera:true};
+  if (km > 45) return {texto:'Es ultrafondo: no la cubro.', fuera:true};
+  if (km < 7.5) return {texto:'Se entrena como un 5K.', fuera:false};
+  if (km < 15.55) return {texto:'Se entrena como un 10K.', fuera:false};
+  if (km < 31.65) return {texto:'Se entrena como un medio maratón.', fuera:false};
+  return {texto:'Se entrena como un maratón.', fuera:false};
+}
 
-  const proximas = propias.filter((c) => c.fecha >= hoy).sort((a,b) => a.fecha < b.fecha ? -1 : 1);
+function traducirDistancia(){
+  const km = parseFloat($('#c-distancia').value);
+  const plan = planDe(km);
+  const nodo = $('#c-como');
+  nodo.textContent = plan ? plan.texto : '';
+  nodo.classList.toggle('fuera', !!plan?.fuera);
+  document.querySelectorAll('#v-agenda .atajo').forEach((b) => {
+    b.classList.toggle('puesto', Number(b.dataset.km) === km);
+  });
+}
+
+function listaDeCarreras(hoy){
+  const proximas = carreras
+    .filter((c) => c.fecha >= hoy)
+    .sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+
   if (!proximas.length){
     return `<p class="vacio">No tienes carreras apuntadas. Toca un día del calendario
       para agregar una, o dísela al coach hablando: él la apunta.</p>`;
@@ -1386,16 +1446,31 @@ function listaDeCarreras(hoy){
 
   const dias = (f) => Math.round((fechaLocal(f) - fechaLocal(hoy)) / 86400000);
   return proximas.map((c) => `
-    <div class="carrera-fila ${c.objetivo ? 'objetivo' : ''}">
+    <div class="carrera-fila ${c.es_objetivo ? 'objetivo' : ''}">
       <div class="icono-lima">${svg('bandera')}</div>
       <div class="cuerpo">
         <div class="nombre">${escapar(c.nombre)}${
-          c.distancia ? ` · ${escapar(NOMBRE_OBJETIVO[c.distancia] || c.distancia)}` : ''}</div>
-        <div class="cuando">${textoFecha(c.fecha)}${c.nota ? ' · ' + escapar(c.nota) : ''}</div>
+          c.distancia_km ? ` · ${c.distancia_km} km` : ''}${
+          c.es_objetivo ? '<span class="insignia">OBJETIVO</span>' : ''}</div>
+        <div class="cuando">${textoFecha(c.fecha)}${
+          c.como_se_entrena ? ' · ' + escapar(c.como_se_entrena) : ''}${
+          c.nota ? ' · ' + escapar(c.nota) : ''}</div>
       </div>
       <span class="faltan">${dias(c.fecha) === 0 ? 'HOY' : dias(c.fecha) + ' d'}</span>
-      ${c.objetivo ? '' : `<button class="quitar" data-id="${c.id}" aria-label="Quitar">${svg('equis')}</button>`}
+      ${!c.es_objetivo && c.categoria
+        ? `<button class="elegir" data-id="${c.id}">Entrenar para esta</button>` : ''}
+      <button class="quitar" data-id="${c.id}" aria-label="Quitar">${svg('equis')}</button>
     </div>`).join('');
+}
+
+async function elegirObjetivo(id){
+  try{
+    const r = await fetch('/api/carreras/' + id + '/objetivo', {method:'POST'});
+    const d = await r.json();
+    if (!r.ok){ anotar('no se pudo elegir objetivo: ' + (d.error || r.status)); return; }
+    anotar(`carrera objetivo: ${d.fecha_carrera} · ${d.como_se_entrena}`);
+    await cargar();
+  }catch(err){ anotar('no se pudo elegir objetivo: ' + err.message); }
 }
 
 function textoFecha(f){
@@ -1425,7 +1500,7 @@ async function guardarCarrera(){
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         nombre, fecha:diaElegido,
-        distancia:$('#c-distancia').value.trim() || null,
+        distancia_km:parseFloat($('#c-distancia').value) || null,
         nota:$('#c-nota').value.trim(),
       }),
     });

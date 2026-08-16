@@ -11,7 +11,8 @@ import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -37,6 +38,7 @@ from pacer.composition_root import (
 from pacer.domain.entidades.carrera import Carrera
 from pacer.domain.puertos.notificacion import MensajeEntrante
 from pacer.domain.puertos.voz import ErrorDeTranscripcion
+from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
 from pacer.domain.servicios.prescripcion import prescribir
 from pacer.domain.servicios.tablero import Tablero, resumir
 from pacer.infrastructure.persistencia.esquema import agregar_columnas_nuevas
@@ -460,7 +462,8 @@ async def carreras() -> dict[str, Any]:
         corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
         apuntadas = await RepositorioCarrera(bd).todas(corredor.id)
 
-    return {"carreras": [_carrera_json(c) for c in apuntadas]}
+    objetivo = corredor.perfil.fecha_carrera
+    return {"carreras": [_carrera_json(c, objetivo) for c in apuntadas]}
 
 
 @app.post("/api/carreras")
@@ -478,6 +481,14 @@ async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
     if fecha is None:
         return JSONResponse({"error": "fecha_no_entendida"}, status_code=400)
 
+    try:
+        km = float(cuerpo["distancia_km"]) if cuerpo.get("distancia_km") else None
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "distancia_no_entendida"}, status_code=400)
+
+    if km is not None and not 0 < km <= 200:
+        return JSONResponse({"error": "distancia_fuera_de_rango"}, status_code=400)
+
     async with app.state.fabrica() as bd:
         corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
         guardada = await RepositorioCarrera(bd).agregar(
@@ -485,12 +496,61 @@ async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
             Carrera(
                 fecha=fecha,
                 nombre=nombre[:80],
-                distancia=(str(cuerpo["distancia"])[:20] if cuerpo.get("distancia") else None),
+                distancia_km=km,
                 nota=str(cuerpo.get("nota") or "")[:200],
             ),
         )
 
-    return JSONResponse(_carrera_json(guardada))
+    return JSONResponse(_carrera_json(guardada, corredor.perfil.fecha_carrera))
+
+
+@app.post("/api/carreras/{carrera_id}/objetivo")
+async def elegir_objetivo(carrera_id: int) -> JSONResponse:
+    """Marca una carrera como la que se está entrenando.
+
+    Es lo que faltaba: con varias carreras apuntadas, nada decía cuál era la
+    objetivo, y el coach lo preguntaba una y otra vez. Elegirla aquí escribe el
+    objetivo y la fecha en el perfil, que es de donde sale el plan.
+    """
+    async with app.state.fabrica() as bd:
+        corredores = RepositorioCorredor(bd)
+        corredor = await corredores.obtener_o_crear_piloto()
+        elegida = next(
+            (
+                c
+                for c in await RepositorioCarrera(bd).todas(corredor.id)
+                if c.id == carrera_id
+            ),
+            None,
+        )
+
+        if elegida is None:
+            return JSONResponse({"error": "no_existe"}, status_code=404)
+        if elegida.distancia_km is None:
+            return JSONResponse({"error": "sin_distancia"}, status_code=400)
+
+        categoria = categoria_de_km(elegida.distancia_km)
+        if categoria is None:
+            return JSONResponse(
+                {
+                    "error": "distancia_no_cubierta",
+                    "explicacion": como_se_entrena(elegida.distancia_km),
+                },
+                status_code=400,
+            )
+
+        await corredores.guardar_perfil(
+            corredor.id,
+            replace(corredor.perfil, objetivo=categoria, fecha_carrera=elegida.fecha),
+        )
+
+    return JSONResponse(
+        {
+            "objetivo": categoria,
+            "fecha_carrera": elegida.fecha.isoformat(),
+            "como_se_entrena": como_se_entrena(elegida.distancia_km),
+        }
+    )
 
 
 @app.delete("/api/carreras/{carrera_id}")
@@ -504,12 +564,20 @@ async def quitar_carrera(carrera_id: int) -> JSONResponse:
     return JSONResponse({"borrada": True})
 
 
-def _carrera_json(carrera: Carrera) -> dict[str, Any]:
+def _carrera_json(carrera: Carrera, fecha_objetivo: date | None) -> dict[str, Any]:
     return {
         "id": carrera.id,
         "fecha": carrera.fecha.isoformat(),
         "nombre": carrera.nombre,
-        "distancia": carrera.distancia,
+        "distancia_km": carrera.distancia_km,
+        # Con qué plan se entrena, resuelto acá: la interfaz no repite la regla.
+        "como_se_entrena": como_se_entrena(carrera.distancia_km)
+        if carrera.distancia_km is not None
+        else None,
+        "categoria": categoria_de_km(carrera.distancia_km)
+        if carrera.distancia_km is not None
+        else None,
+        "es_objetivo": fecha_objetivo is not None and carrera.fecha == fecha_objetivo,
         "nota": carrera.nota,
     }
 
