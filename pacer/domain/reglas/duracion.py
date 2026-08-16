@@ -25,6 +25,11 @@ SEMANAS_MIN_POR_NIVEL: dict[str, dict[str, int | None]] = {
 # semanas de base.
 KM_ARRANQUE_MIN = {"5k": 12, "10k": 18, "21k": 25, "maraton": 32}
 
+# Techo duro de volumen semanal: el extremo alto del "pico típico recreativo"
+# de §2.3. Al alcanzarlo la tendencia deja de crecer y se sostiene, que es lo
+# que hace un entrenador: no se sube para siempre.
+PICO_MAX_KM = {"5k": 40, "10k": 50, "21k": 60, "maraton": 70}
+
 DESCARGA_CADA_N_SEMANAS = {
     "nuevo": 3,
     "principiante": 3,

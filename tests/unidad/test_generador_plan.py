@@ -1,6 +1,7 @@
 from datetime import date
 from itertools import pairwise
 
+from pacer.domain.reglas.duracion import PICO_MAX_KM
 from pacer.domain.servicios.generador_plan import generar_plan
 
 PERFIL = {
@@ -55,6 +56,36 @@ def test_al_menos_78_por_ciento_de_los_km_son_faciles() -> None:
     for semana in plan.semanas:
         faciles = sum(s.km for s in semana.sesiones if s.tipo != "calidad")
         assert faciles / semana.km_total >= 0.78
+
+
+def test_el_volumen_nunca_supera_el_techo_de_la_distancia() -> None:
+    # Sin techo, este perfil llegaba a 91.4 km/semana contra un pico típico
+    # recreativo documentado de 45-70 (§2.3).
+    plan = generar_plan(
+        distancia="maraton",
+        nivel="principiante",
+        semanas=20,
+        km_semana=32,
+        dias=4,
+        inicio=date(2026, 8, 17),
+    )
+
+    for semana in plan.semanas:
+        assert semana.km_total <= PICO_MAX_KM["maraton"]
+
+
+def test_al_llegar_al_techo_la_carga_se_sostiene() -> None:
+    plan = generar_plan(
+        distancia="maraton",
+        nivel="principiante",
+        semanas=20,
+        km_semana=32,
+        dias=4,
+        inicio=date(2026, 8, 17),
+    )
+    de_carga = [s for s in plan.semanas if not s.es_descarga]
+
+    assert max(s.km_total for s in de_carga) >= PICO_MAX_KM["maraton"] * 0.95
 
 
 def test_el_largo_es_siempre_la_sesion_mas_larga() -> None:

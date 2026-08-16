@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from pacer.domain.entidades.plan import Plan, Semana, Sesion, TipoSesion
 from pacer.domain.reglas.descarga import FACTOR_VOLUMEN
 from pacer.domain.reglas.duracion import (
+    PICO_MAX_KM,
     descarga_cada,
     descarga_en_base,
     validar_duracion,
@@ -66,7 +67,7 @@ def generar_plan(
     bloques = repartir_bloques(distancia, semanas)
     primer_dia = inicio
 
-    volumenes = _volumenes_por_semana(bloques, km_semana, nivel)
+    volumenes = _volumenes_por_semana(bloques, km_semana, nivel, distancia)
     construidas = []
 
     numero = 0
@@ -90,7 +91,7 @@ def generar_plan(
 
 
 def _volumenes_por_semana(
-    bloques: dict[str, int], km_inicial: int, nivel: str
+    bloques: dict[str, int], km_inicial: int, nivel: str, distancia: str
 ) -> list[tuple[float, bool]]:
     """Calcula el volumen de cada semana y marca cuáles son de descarga."""
     volumenes: list[tuple[float, bool]] = []
@@ -99,6 +100,9 @@ def _volumenes_por_semana(
     # progresión continuara desde el valor reducido, cada ciclo cerraría en
     # 1.10 × 1.10 × 0.65 = 0.79 y el plan iría hacia abajo.
     tendencia = float(km_inicial)
+    # Techo duro: la carga deja de crecer al llegar al pico de la distancia y
+    # se sostiene. Un entrenador no sube el volumen indefinidamente.
+    techo = float(PICO_MAX_KM[distancia])
     cada = descarga_cada(nivel)
     en_base = descarga_en_base(nivel)
     indice = 0
@@ -115,7 +119,7 @@ def _volumenes_por_semana(
                 volumen = tendencia * FACTOR_VOLUMEN
             else:
                 if indice > 1:
-                    tendencia *= PROGRESION_SEMANAL_MAX
+                    tendencia = min(tendencia * PROGRESION_SEMANAL_MAX, techo)
                 volumen = tendencia
             volumenes.append((round(volumen, 1), es_descarga))
 
