@@ -9,8 +9,12 @@ por id, y esconder esa diferencia es exactamente el trabajo del puerto.
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 from pacer.domain.puertos.llm import LlamadaHerramienta, RespuestaLLM
+
+# Por encima de esto conviene reintentar en vez de seguir esperando.
+TIEMPO_LIMITE_S = 12
 from pacer.domain.puertos.observabilidad import (
     TIPO_GENERACION,
     PuertoObservabilidad,
@@ -25,7 +29,19 @@ class AdaptadorBedrock:
         region: str,
         observabilidad: PuertoObservabilidad | None = None,
     ) -> None:
-        self._cliente = boto3.client("bedrock-runtime", region_name=region)
+        # Medido: las llamadas normales tardan 1–2 s, pero una de cada ocho se
+        # atascó 42 s con el mismo prompt y el mismo contexto. Esperar no la
+        # arregla; cortar y reintentar sí. El usuario tiene el teléfono en la
+        # mano y 42 s es abandono garantizado.
+        self._cliente = boto3.client(
+            "bedrock-runtime",
+            region_name=region,
+            config=Config(
+                connect_timeout=5,
+                read_timeout=TIEMPO_LIMITE_S,
+                retries={"max_attempts": 3, "mode": "adaptive"},
+            ),
+        )
         self._model_id = model_id
         self._trazas = observabilidad or SinObservabilidad()
 

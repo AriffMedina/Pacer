@@ -58,6 +58,84 @@ _YA_SINTETIZADO: OrderedDict[str, bytes] = OrderedDict()
 MAX_PENDIENTES = 20
 
 
+async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
+    """Un turno completo, venga de voz o de texto.
+
+    La traza envuelve todo: las llamadas al modelo cuelgan de ella, así en
+    Langfuse se ve una conversación y no llamadas sueltas.
+    """
+    hoy = datetime.now(UTC).date()
+
+    with app.state.trazas.observar(
+        nombre="turno", entrada={"dicho": dicho}, metadatos={"canal": canal}
+    ) as traza:
+        async with app.state.fabrica() as bd:
+            corredores = RepositorioCorredor(bd)
+            corredor = await corredores.obtener_o_crear_piloto()
+
+            # El coach retoma donde quedó, aunque el servidor se haya reiniciado.
+            historial = await corredores.ultimos_turnos(corredor.id, TURNOS_RECORDADOS)
+            historial.append({"role": "user", "content": [{"text": dicho}]})
+
+            repositorio = RepositorioPlan(bd)
+            plan_previo = await repositorio.version_activa(corredor.id)
+            sistema = construir_prompt(
+                construir_bloque(
+                    plan_previo, hoy=hoy, fecha_carrera=corredor.perfil.fecha_carrera
+                )
+                if plan_previo and corredor.perfil.fecha_carrera
+                else None
+            )
+
+            resultado = await atender_turno(
+                llm=app.state.llm,
+                repositorio=repositorio,
+                sistema=sistema,
+                mensajes=historial,
+                perfil=corredor.perfil,
+                corredor_id=corredor.id,
+                hoy=hoy,
+            )
+
+            await corredores.guardar_perfil(corredor.id, resultado.perfil)
+            await corredores.recordar(corredor.id, "user", dicho, canal=canal)
+            await corredores.recordar(
+                corredor.id, "assistant", resultado.texto, canal=canal
+            )
+
+        traza.registrar_salida(
+            {
+                "respuesta": resultado.texto,
+                "herramientas": list(resultado.herramientas_usadas),
+                "plan_version": resultado.plan.version if resultado.plan else None,
+                "motivo_cambio": resultado.plan.motivo_cambio if resultado.plan else None,
+                "vueltas": resultado.vueltas,
+            }
+        )
+
+    return resultado, _guardar_para_voz(resultado.texto)
+
+
+def _respuesta(
+    dicho: str, resultado: Any, turno_id: str, ms_stt: int, ms_total: int
+) -> JSONResponse:
+    return JSONResponse(
+        {
+            "transcripcion": dicho,
+            "respuesta": resultado.texto,
+            "turno_id": turno_id,
+            "herramientas": list(resultado.herramientas_usadas),
+            "plan_version": resultado.plan.version if resultado.plan else None,
+            "motivo_cambio": resultado.plan.motivo_cambio if resultado.plan else None,
+            "latencia_ms": {
+                "transcripcion": ms_stt,
+                "coach": ms_total - ms_stt,
+                "total": ms_total,
+            },
+        }
+    )
+
+
 def _guardar_para_voz(texto: str) -> str:
     turno_id = uuid4().hex[:12]
     _PENDIENTES[turno_id] = texto
@@ -211,89 +289,16 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
         return JSONResponse({"error": "no_se_entendio"}, status_code=422)
 
     ms_stt = int((time.perf_counter() - arranque) * 1000)
-    hoy = datetime.now(UTC).date()
 
-    # La traza del turno envuelve todo: las llamadas al modelo cuelgan de ella,
-    # así en Langfuse se ve una conversación y no llamadas sueltas.
-    with app.state.trazas.observar(
-        nombre="turno_hablado",
-        entrada={"transcripcion": transcripcion.texto},
-        metadatos={"ms_transcripcion": ms_stt},
-    ) as traza:
-        async with app.state.fabrica() as bd:
-            corredores = RepositorioCorredor(bd)
-            corredor = await corredores.obtener_o_crear_piloto()
-
-            # El coach retoma donde quedó, aunque el servidor se haya reiniciado.
-            historial = await corredores.ultimos_turnos(
-                corredor.id, TURNOS_RECORDADOS
-            )
-            historial.append(
-                {"role": "user", "content": [{"text": transcripcion.texto}]}
-            )
-
-            repositorio = RepositorioPlan(bd)
-            plan_previo = await repositorio.version_activa(corredor.id)
-            sistema = construir_prompt(
-                construir_bloque(
-                    plan_previo, hoy=hoy, fecha_carrera=corredor.perfil.fecha_carrera
-                )
-                if plan_previo and corredor.perfil.fecha_carrera
-                else None
-            )
-
-            resultado = await atender_turno(
-                llm=app.state.llm,
-                repositorio=repositorio,
-                sistema=sistema,
-                mensajes=historial,
-                perfil=corredor.perfil,
-                corredor_id=corredor.id,
-                hoy=hoy,
-            )
-
-            await corredores.guardar_perfil(corredor.id, resultado.perfil)
-            await corredores.recordar(
-                corredor.id, "user", transcripcion.texto, canal="web"
-            )
-            await corredores.recordar(
-                corredor.id, "assistant", resultado.texto, canal="web"
-            )
-
-        traza.registrar_salida(
-            {
-                "respuesta": resultado.texto,
-                "herramientas": list(resultado.herramientas_usadas),
-                "plan_version": resultado.plan.version if resultado.plan else None,
-                "motivo_cambio": resultado.plan.motivo_cambio if resultado.plan else None,
-                "vueltas": resultado.vueltas,
-            }
-        )
-
+    resultado, turno_id = await _atender(transcripcion.texto, canal="web")
     ms_total = int((time.perf_counter() - arranque) * 1000)
 
-    # La voz NO se sintetiza aquí. El texto se devuelve en cuanto está y el
-    # audio se pide aparte: así el usuario lee la respuesta segundos antes de
-    # oírla, y un turno en modo texto no gasta una llamada a Polly.
-    turno_id = _guardar_para_voz(resultado.texto)
+    # La voz NO se sintetiza aquí: el texto se devuelve en cuanto está y el
+    # audio se pide aparte, así se lee la respuesta antes de oírla.
     if resultado.texto:
         tareas.add_task(_adelantar_sintesis, turno_id, resultado.texto)
 
-    return JSONResponse(
-        {
-            "transcripcion": transcripcion.texto,
-            "respuesta": resultado.texto,
-            "turno_id": turno_id,
-            "herramientas": list(resultado.herramientas_usadas),
-            "plan_version": resultado.plan.version if resultado.plan else None,
-            "motivo_cambio": resultado.plan.motivo_cambio if resultado.plan else None,
-            "latencia_ms": {
-                "transcripcion": ms_stt,
-                "coach": ms_total - ms_stt,
-                "total": ms_total,
-            },
-        }
-    )
+    return _respuesta(transcripcion.texto, resultado, turno_id, ms_stt, ms_total)
 
 
 @app.get("/api/voz/{turno_id}")
@@ -309,6 +314,27 @@ async def voz(turno_id: str) -> Response:
 
     audio = await asyncio.to_thread(app.state.tts.sintetizar, texto)
     return Response(audio, media_type="audio/mpeg")
+
+
+@app.post("/api/mensaje")
+async def mensaje(cuerpo: dict[str, Any], tareas: BackgroundTasks) -> JSONResponse:
+    """Un turno escrito. Mismo coach, mismo pipeline, sin transcripción.
+
+    Existe para los chips de sugerencia y para el modo texto: en un producto de
+    voz, escribir tiene que ser una alternativa, no una vía muerta.
+    """
+    texto = str(cuerpo.get("texto", "")).strip()
+    if not texto:
+        return JSONResponse({"error": "mensaje_vacio"}, status_code=400)
+
+    arranque = time.perf_counter()
+    resultado, turno_id = await _atender(texto, canal="web")
+    ms_total = int((time.perf_counter() - arranque) * 1000)
+
+    if resultado.texto:
+        tareas.add_task(_adelantar_sintesis, turno_id, resultado.texto)
+
+    return _respuesta(texto, resultado, turno_id, ms_stt=0, ms_total=ms_total)
 
 
 @app.get("/api/plan")
