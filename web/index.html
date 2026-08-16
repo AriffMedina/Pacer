@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pacer</title>
+</head>
+<body>
+  <h1>Pacer</h1>
+
+  <button id="hablar">Mantén presionado para hablar</button>
+
+  <p id="estado">Listo.</p>
+  <pre id="diagnostico"></pre>
+
+  <script>
+    const boton = document.getElementById("hablar");
+    const estado = document.getElementById("estado");
+    const diagnostico = document.getElementById("diagnostico");
+
+    let grabadora = null;
+    let trozos = [];
+
+    function anotar(linea) {
+      diagnostico.textContent += linea + "\n";
+    }
+
+    // El navegador decide el formato: Safari graba audio/mp4, Chrome audio/webm.
+    // Nunca se asume; se lee de la grabadora y se manda tal cual.
+    function extension(tipo) {
+      if (tipo.includes("mp4")) return "mp4";
+      if (tipo.includes("ogg")) return "ogg";
+      return "webm";
+    }
+
+    async function empezar() {
+      if (grabadora) return;
+      try {
+        const flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
+        grabadora = new MediaRecorder(flujo);
+        trozos = [];
+        grabadora.ondataavailable = (e) => trozos.push(e.data);
+        grabadora.onstop = enviar;
+        grabadora.start();
+        estado.textContent = "Grabando…";
+      } catch (error) {
+        estado.textContent = "No se pudo abrir el micrófono.";
+        anotar("getUserMedia falló: " + error.name + " — " + error.message);
+        anotar("¿La página está en HTTPS? Safari lo exige salvo en localhost.");
+        grabadora = null;
+      }
+    }
+
+    function parar() {
+      if (!grabadora) return;
+      grabadora.stop();
+      grabadora.stream.getTracks().forEach((t) => t.stop());
+      estado.textContent = "Enviando…";
+    }
+
+    async function enviar() {
+      const tipo = grabadora.mimeType || "audio/webm";
+      grabadora = null;
+
+      const blob = new Blob(trozos, { type: tipo });
+      anotar("grabado " + blob.size + " bytes, tipo " + tipo);
+
+      const cuerpo = new FormData();
+      cuerpo.append("audio", blob, "turno." + extension(tipo));
+
+      try {
+        const respuesta = await fetch("/api/turno", { method: "POST", body: cuerpo });
+        if (!respuesta.ok) {
+          estado.textContent = "El servidor respondió " + respuesta.status + ".";
+          return;
+        }
+        const audio = new Audio(URL.createObjectURL(await respuesta.blob()));
+        await audio.play();
+        estado.textContent = "Listo.";
+      } catch (error) {
+        estado.textContent = "Falló el envío.";
+        anotar("fetch falló: " + error.message);
+      }
+    }
+
+    boton.addEventListener("mousedown", empezar);
+    boton.addEventListener("mouseup", parar);
+    boton.addEventListener("touchstart", (e) => { e.preventDefault(); empezar(); });
+    boton.addEventListener("touchend", (e) => { e.preventDefault(); parar(); });
+  </script>
+</body>
+</html>

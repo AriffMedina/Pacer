@@ -17,6 +17,10 @@ dependencies = [
     "uvicorn[standard]>=0.52.3",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "hypothesis>=6.165.9",
