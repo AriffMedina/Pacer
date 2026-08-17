@@ -12,7 +12,7 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -46,6 +46,7 @@ from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 from pacer.infrastructure.persistencia.repositorio_carrera import RepositorioCarrera
 from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
+from pacer.infrastructure.reloj import hoy as hoy_del_corredor
 from pacer.interfaces.http.internas import router as router_interno
 from pacer.interfaces.worker.sondeo_telegram import sondear
 
@@ -72,7 +73,7 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
     La traza envuelve todo: las llamadas al modelo cuelgan de ella, así en
     Langfuse se ve una conversación y no llamadas sueltas.
     """
-    hoy = datetime.now(UTC).date()
+    hoy = hoy_del_corredor()
 
     with app.state.trazas.observar(
         nombre="turno", entrada={"dicho": dicho}, metadatos={"canal": canal}
@@ -254,7 +255,7 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
         return None
 
     async def atender(mensaje: MensajeEntrante) -> None:
-        hoy = datetime.now(UTC).date()
+        hoy = hoy_del_corredor()
 
         async with app.state.fabrica() as bd:
             corredores = RepositorioCorredor(bd)
@@ -403,7 +404,7 @@ async def mensaje(cuerpo: dict[str, Any], tareas: BackgroundTasks) -> JSONRespon
 @app.get("/api/plan")
 async def plan_actual() -> dict[str, Any]:
     """El plan vigente y el perfil, para las pantallas de plan y agenda."""
-    hoy = datetime.now(UTC).date()
+    hoy = hoy_del_corredor()
 
     async with app.state.fabrica() as bd:
         corredores = RepositorioCorredor(bd)

@@ -14,6 +14,9 @@ dependencies = [
     "python-multipart>=0.0.32",
     "sqlalchemy>=2.0.52",
     "tenacity>=9.1.4",
+    # Windows no trae base de zonas horarias del sistema: sin esto `zoneinfo`
+    # falla hasta con "UTC" y el reloj del corredor no funciona al desarrollar.
+    "tzdata>=2026.1",
     "uvicorn[standard]>=0.52.3",
 ]
 

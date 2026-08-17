@@ -397,6 +397,10 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   font-size:14px;outline:none;resize:none}
 .forma input:focus,.forma textarea:focus{border-color:rgba(198,249,74,.45)}
 .forma .pie{display:flex;gap:9px;justify-content:flex-end;margin-top:11px}
+.etiqueta{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--texto-3);margin:11px 0 6px;font-family:'JetBrains Mono',monospace}
+.forma input[type="date"]{color-scheme:dark;margin-bottom:2px}
+:root[data-tema="claro"] .forma input[type="date"]{color-scheme:light}
 .boton{display:inline-flex;align-items:center;gap:8px;padding:10px 17px;
   border-radius:99px;font-size:13px;font-weight:500;
   border:1px solid var(--linea-fuerte);color:var(--texto-2);white-space:nowrap}
@@ -1292,7 +1296,8 @@ function borradorAbierto(){
 
   const activo = document.activeElement;
   return {
-    fecha: diaElegido,
+    // La del campo, no `diaElegido`: la persona pudo corregirla a mano.
+    fecha: $('#c-fecha').value || diaElegido,
     nombre: $('#c-nombre').value,
     distancia: $('#c-distancia').value,
     nota: $('#c-nota').value,
@@ -1357,6 +1362,10 @@ function pintarAgenda(){
           <span>km</span>
         </div>
       </div>
+      <!-- La fecha se ve y se puede corregir. Escondida en el título, una
+           fecha equivocada solo se descubre cuando la carrera no aparece. -->
+      <label class="etiqueta" for="c-fecha">Día de la carrera</label>
+      <input id="c-fecha" type="date">
       <div class="atajos">
         ${[['5K',5],['10K',10],['Medio',21.1],['Maratón',42.2]].map(([t,k]) =>
           `<button type="button" class="atajo" data-km="${k}">${t}</button>`).join('')}
@@ -1382,6 +1391,7 @@ function pintarAgenda(){
   $('#btn-nueva').onclick = () => abrirForma(datos.hoy, true);
   $('#c-guardar').onclick = guardarCarrera;
   $('#c-distancia').oninput = traducirDistancia;
+  $('#c-fecha').onchange = avisarSiEsPasada;
   document.querySelectorAll('#v-agenda .atajo').forEach((b) => {
     b.onclick = () => { $('#c-distancia').value = b.dataset.km; traducirDistancia(); };
   });
@@ -1459,17 +1469,28 @@ function traducirDistancia(){
 }
 
 function listaDeCarreras(hoy){
-  const proximas = carreras
-    .filter((c) => c.fecha >= hoy)
-    .sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+  const proximas = carreras.filter((c) => c.fecha >= hoy).sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+  const pasadas = carreras.filter((c) => c.fecha < hoy).sort((a, b) => a.fecha > b.fecha ? -1 : 1);
 
-  if (!proximas.length){
+  if (!carreras.length){
     return `<p class="vacio">No tienes carreras apuntadas. Toca un día del calendario
       para agregar una, o dísela al coach hablando: él la apunta.</p>`;
   }
 
+  // Las pasadas se muestran igual. Filtrarlas en silencio hacía que guardar una
+  // con la fecha equivocada se viera como "la app no me deja agregar carreras".
+  return filas(proximas, hoy)
+    + (pasadas.length ? `
+      <p class="eyebrow" style="margin:18px 0 10px">Ya pasaron</p>
+      <div style="opacity:.55">${filas(pasadas, hoy)}</div>` : '');
+}
+
+function filas(lista, hoy){
+  if (!lista.length){
+    return '<p class="vacio">No tienes ninguna carrera por delante.</p>';
+  }
   const dias = (f) => Math.round((fechaLocal(f) - fechaLocal(hoy)) / 86400000);
-  return proximas.map((c) => `
+  return lista.map((c) => `
     <div class="carrera-fila ${c.es_objetivo ? 'objetivo' : ''}">
       <div class="icono-lima">${svg('bandera')}</div>
       <div class="cuerpo">
@@ -1480,7 +1501,10 @@ function listaDeCarreras(hoy){
           c.como_se_entrena ? ' · ' + escapar(c.como_se_entrena) : ''}${
           c.nota ? ' · ' + escapar(c.nota) : ''}</div>
       </div>
-      <span class="faltan">${dias(c.fecha) === 0 ? 'HOY' : dias(c.fecha) + ' d'}</span>
+      <span class="faltan">${
+        dias(c.fecha) === 0 ? 'HOY'
+        : dias(c.fecha) > 0 ? dias(c.fecha) + ' d'
+        : 'hace ' + Math.abs(dias(c.fecha)) + ' d'}</span>
       ${!c.es_objetivo && c.categoria
         ? `<button class="elegir" data-id="${c.id}">Entrenar para esta</button>` : ''}
       <button class="quitar" data-id="${c.id}" aria-label="Quitar">${svg('equis')}</button>
@@ -1509,18 +1533,38 @@ function textoFecha(f){
 
 function abrirForma(fecha, enfocar = false){
   diaElegido = fecha;
-  $('#forma-titulo').textContent = 'Carrera del ' + textoFecha(fecha);
+  $('#forma-titulo').textContent = 'Nueva carrera';
+  $('#c-fecha').value = fecha;
   $('#c-aviso').classList.remove('on');
   $('#forma-carrera').classList.add('abierta');
+  avisarSiEsPasada();
   // Al restaurar un borrador NO se roba el foco: la persona puede estar
   // escribiendo en las notas y saltarle el cursor al nombre es peor que el bug.
   if (enfocar) $('#c-nombre').focus();
 }
 
+/* Avisa, no impide: apuntar una carrera que ya corriste es legítimo. Lo que no
+   puede es guardarse en silencio y desaparecer de la lista. */
+function avisarSiEsPasada(){
+  const nodo = $('#c-aviso');
+  if ($('#c-fecha').value && $('#c-fecha').value < datos.hoy){
+    nodo.textContent = 'Ojo: esa fecha ya pasó. Se guardará entre las carreras pasadas.';
+    nodo.classList.add('on');
+  }else if (nodo.textContent.startsWith('Ojo')){
+    nodo.classList.remove('on');
+  }
+}
+
 async function guardarCarrera(){
   const nombre = $('#c-nombre').value.trim();
+  const fecha = $('#c-fecha').value;
   if (!nombre){
     $('#c-aviso').textContent = 'Ponle un nombre para poder reconocerla.';
+    $('#c-aviso').classList.add('on');
+    return;
+  }
+  if (!fecha){
+    $('#c-aviso').textContent = 'Elige el día de la carrera.';
     $('#c-aviso').classList.add('on');
     return;
   }
@@ -1528,7 +1572,7 @@ async function guardarCarrera(){
     const r = await fetch('/api/carreras', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        nombre, fecha:diaElegido,
+        nombre, fecha,
         distancia_km:parseFloat($('#c-distancia').value) || null,
         nota:$('#c-nota').value.trim(),
       }),
@@ -1539,7 +1583,7 @@ async function guardarCarrera(){
       $('#c-aviso').classList.add('on');
       return;
     }
-    anotar('carrera apuntada: ' + nombre + ' ' + diaElegido);
+    anotar('carrera apuntada: ' + nombre + ' ' + fecha);
     // Se cierra ANTES de recargar: si no, el repintado creería que hay un
     // borrador a medio llenar y devolvería lo que se acaba de guardar.
     $('#forma-carrera').classList.remove('abierta');

@@ -3,11 +3,15 @@
 import asyncio
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+
+# El mismo reloj que usa la app. Sembrar con UTC mientras el sistema piensa en
+# la zona del corredor hace que "ayer" signifique dos días distintos.
+from pacer.infrastructure.reloj import hoy as hoy_del_corredor
 
 TOKEN = "token-de-prueba"
 CABECERA = {"X-Pacer-Token": TOKEN}
@@ -84,7 +88,7 @@ async def _sembrar_plan_con_sesion_pasada(cliente: TestClient) -> None:
         nivel="intermedio",
         dias_disponibles=4,
         km_semana=25,
-        fecha_carrera=datetime.now(UTC).date() + timedelta(weeks=12),
+        fecha_carrera=hoy_del_corredor() + timedelta(weeks=12),
     )
 
     async with cliente.app.state.fabrica() as bd:
@@ -92,7 +96,7 @@ async def _sembrar_plan_con_sesion_pasada(cliente: TestClient) -> None:
         corredor = await corredores.obtener_o_crear_piloto()
         # Sin canal vinculado el recordatorio no tendría dónde llegar.
         await corredores.vincular_telegram(corredor.id, 555000)
-        plan = crear_plan(perfil, hoy=datetime.now(UTC).date() - timedelta(days=2))
+        plan = crear_plan(perfil, hoy=hoy_del_corredor() - timedelta(days=2))
         await RepositorioPlan(bd).guardar(plan, corredor_id=corredor.id)
 
 

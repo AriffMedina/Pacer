@@ -9,7 +9,6 @@ n8n habla con el backend por HTTP igual que el navegador. No tiene credenciales
 de base de datos. No es un componente privilegiado: es un cliente más.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -21,6 +20,7 @@ from pacer.composition_root import configuracion
 from pacer.infrastructure.persistencia.repositorio_recordatorio import (
     RepositorioRecordatorio,
 )
+from pacer.infrastructure.reloj import ahora as ahora_del_corredor
 
 router = APIRouter(prefix="/internal", tags=["interna"])
 
@@ -48,7 +48,7 @@ async def vencidos(
 
     async with peticion.app.state.fabrica() as bd:
         pendientes = await RepositorioRecordatorio(bd).vencidos_con_destino(
-            datetime.now(UTC)
+            ahora_del_corredor()
         )
 
     # `chat_id` viaja con cada recordatorio: el nodo de Telegram lo lee del dato
@@ -101,6 +101,6 @@ async def materializar(
     _exigir_token(x_pacer_token)
 
     async with peticion.app.state.fabrica() as bd:
-        nuevos = await materializar_recordatorios(bd, ahora=datetime.now(UTC))
+        nuevos = await materializar_recordatorios(bd, ahora=ahora_del_corredor())
 
     return {"nuevos": nuevos}
