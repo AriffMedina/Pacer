@@ -18,10 +18,12 @@ class LLMDeMentira:
 
     def __init__(self, *respuestas: RespuestaLLM) -> None:
         self._respuestas = list(respuestas)
+        self.recibidos: list[list[dict[str, Any]]] = []
 
     def conversar(
         self, sistema: str, mensajes: list[dict[str, Any]], herramientas: dict[str, Any]
     ) -> RespuestaLLM:
+        self.recibidos.append([dict(m) for m in mensajes])
         return self._respuestas.pop(0)
 
 
@@ -159,6 +161,49 @@ def test_una_carrera_sin_nombre_no_se_apunta() -> None:
 
 
 # --- que el coach las vea ------------------------------------------------
+
+
+def test_al_pausar_se_le_dice_la_vuelta_REAL_no_una_sesion_anterior() -> None:
+    """El coach anunció "vuelves el lunes 24 con 5.3 km" cuando la vuelta real
+    era el martes 25 con 6.6. Le llegaba una sesión ANTERIOR al parón como si
+    fuera la de vuelta, y con ese dato absurdo se inventó una fecha creíble."""
+    from datetime import date as _date
+
+    from pacer.domain.entidades.plan import Plan, Semana, Sesion
+
+    plan = Plan(
+        version=1,
+        semanas=(
+            Semana(
+                numero=1,
+                sesiones=(
+                    Sesion(fecha=_date(2026, 8, 20), tipo="largo", km=15.4),
+                    Sesion(fecha=_date(2026, 8, 22), tipo="facil", km=7.2),
+                    Sesion(fecha=_date(2026, 8, 29), tipo="facil", km=8.0),
+                ),
+            ),
+        ),
+    )
+    llm = LLMDeMentira(
+        RespuestaLLM(
+            texto="",
+            llamadas=(
+                LlamadaHerramienta(
+                    id="t1",
+                    nombre="pausar_entrenamiento",
+                    entrada={"desde": "2026-08-21", "hasta": "2026-08-27"},
+                ),
+            ),
+            mensaje={"role": "assistant", "content": []},
+        ),
+        RespuestaLLM(texto="Listo.", llamadas=(), mensaje={"role": "assistant", "content": []}),
+    )
+
+    procesar_turno(llm, "sistema", [], Perfil(), hoy=HOY, plan=plan)
+
+    devuelto = json.dumps(llm.recibidos[-1], ensure_ascii=False, default=str)
+    assert "29 de agosto" in devuelto
+    assert "20 de agosto" not in devuelto
 
 
 def test_el_bloque_de_estado_lista_las_carreras_con_los_dias_ya_contados() -> None:

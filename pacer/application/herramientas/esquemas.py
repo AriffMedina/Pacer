@@ -64,6 +64,18 @@ class MoverSesion(BaseModel):
     )
 
 
+class PausarEntrenamiento(BaseModel):
+    """Úsala cuando el corredor tenga que PARAR varios días.
+
+    Una lesión, una gripe, un viaje, reposo mandado por un médico. Quita las
+    sesiones de esos días y suaviza la vuelta. NO narres el descanso sin
+    llamarla: sin esta llamada el plan no cambia y le habrás mentido.
+    """
+
+    desde: str = Field(description="Primer día de descanso, en ISO AAAA-MM-DD.")
+    hasta: str = Field(description="Último día de descanso, en ISO AAAA-MM-DD.")
+
+
 class GenerarPlan(BaseModel):
     """Úsala solo cuando el perfil esté completo. Si falta algo, pregunta."""
 
@@ -129,6 +141,7 @@ HERRAMIENTAS: dict[str, type[BaseModel]] = {
     "actualizar_perfil": ActualizarPerfil,
     "registrar_sesion": RegistrarSesion,
     "mover_sesion": MoverSesion,
+    "pausar_entrenamiento": PausarEntrenamiento,
     "generar_plan": GenerarPlan,
     "apuntar_carrera": ApuntarCarrera,
     "mover_carrera": MoverCarrera,

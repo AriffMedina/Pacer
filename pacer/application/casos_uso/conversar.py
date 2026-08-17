@@ -25,6 +25,7 @@ from pacer.domain.servicios.mover import (
     dias_libres,
     mover_sesion,
 )
+from pacer.domain.servicios.pausa import PausaImposible, pausar
 from pacer.domain.servicios.registro import registrar
 from pacer.domain.servicios.resolutor import resolver_sesion
 
@@ -149,6 +150,8 @@ def procesar_turno(
                     plan, resultado = _registrar_y_ajustar(plan, llamada.entrada, hoy)
                 elif llamada.nombre == "mover_sesion":
                     plan, resultado = _mover(plan, llamada.entrada, hoy)
+                elif llamada.nombre == "pausar_entrenamiento":
+                    plan, resultado = _pausar(plan, llamada.entrada, hoy)
                 elif llamada.nombre == "apuntar_carrera":
                     nueva, resultado = _apuntar_carrera(llamada.entrada)
                     if nueva is not None:
@@ -234,6 +237,67 @@ def _mover(
         "ok": True,
         "movida_de": en_palabras(origen),
         "movida_a": en_palabras(destino),
+    }
+
+
+def _pausar(
+    plan: Plan | None, entrada: dict[str, Any], hoy: date
+) -> tuple[Plan | None, dict[str, Any]]:
+    """Para el entrenamiento unos días y suaviza la vuelta.
+
+    Devuelve QUÉ cambió de verdad —cuántas sesiones se fueron, cuándo se
+    vuelve— para que el coach cuente hechos. El fallo que esto arregla fue
+    exactamente el contrario: narró un descanso que nunca ocurrió.
+    """
+    if plan is None:
+        return None, {"error": "sin_plan", "explicacion": "todavía no hay plan"}
+
+    desde = interpretar_fecha(str(entrada.get("desde", ""))) or _dia_hablado(
+        str(entrada.get("desde", "")), hoy
+    )
+    hasta = interpretar_fecha(str(entrada.get("hasta", ""))) or _dia_hablado(
+        str(entrada.get("hasta", "")), hoy
+    )
+    if desde is None or hasta is None:
+        return plan, {
+            "error": "no_entendi_las_fechas",
+            "como_seguir": "Pregúntale desde qué día y hasta qué día tiene que parar.",
+        }
+
+    antes = sum(
+        1
+        for semana in plan.semanas
+        for sesion in semana.sesiones
+        if not sesion.completada
+    )
+    try:
+        nuevo = pausar(plan, desde=desde, hasta=hasta, hoy=hoy)
+    except PausaImposible as rechazo:
+        return plan, {
+            "error": "no_se_puede_pausar_asi",
+            "razon_para_explicar": rechazo.razon,
+            "como_decilo": COMO_DECIR_QUE_NO,
+        }
+
+    pendientes = [
+        s for semana in nuevo.semanas for s in semana.sesiones if not s.completada
+    ]
+    # La vuelta es la primera DESPUÉS del descanso. Tomar el mínimo de todas las
+    # pendientes devolvía una sesión anterior al parón, y con ese dato absurdo
+    # el modelo se inventó una fecha y unos kilómetros que sonaban bien.
+    de_vuelta = sorted((s for s in pendientes if s.fecha > hasta), key=lambda s: s.fecha)
+    primera = de_vuelta[0] if de_vuelta else None
+
+    return nuevo, {
+        "ok": True,
+        "sesiones_quitadas": antes - len(pendientes),
+        "vuelves_el": en_palabras(primera.fecha) if primera else None,
+        "primera_de_vuelta_km": primera.km if primera else None,
+        "primera_de_vuelta_tipo": primera.tipo if primera else None,
+        "que_explicar": (
+            "La vuelta entra más suave a propósito: se pierde forma parado y "
+            "volver al volumen de antes es como se recae."
+        ),
     }
 
 
