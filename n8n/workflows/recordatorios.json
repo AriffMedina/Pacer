@@ -1,0 +1,164 @@
+{
+  "name": "Pacer · recordatorios",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Cada 15 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-180, 0],
+      "notes": "Cada cuarto de hora es suficiente: un recordatorio de entrenamiento no es una alarma, y consultar mas seguido solo gasta."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PACER_API }}/internal/recordatorios/materializar",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Materializar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 0],
+      "notes": "Convierte el plan en recordatorios pendientes. Quien decide QUE se recuerda y CUANDO es la app; n8n solo dispara y entrega.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pacer-token",
+          "name": "Pacer token interno"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.PACER_API }}/internal/recordatorios/vencidos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Vencidos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "notes": "Devuelve una lista donde CADA recordatorio trae su propio chat_id. Por eso el mismo workflow sirve para un corredor o para mil: el destino viaja con el dato, no en la configuracion del nodo.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pacer-token",
+          "name": "Pacer token interno"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hay-destino",
+              "leftValue": "={{ $json.chat_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Tiene a quien escribirle",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [480, 0],
+      "notes": "Sin recordatorios vencidos la lista llega vacia y no hay nada que hacer. Tambien protege del corredor que aun no vinculo su Telegram: no tiene chat_id y no se le puede escribir."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texto }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Mandar por Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, 0],
+      "notes": "El chat_id sale del dato, no de una configuracion fija.",
+      "credentials": {
+        "telegramApi": {
+          "id": "pacer-bot",
+          "name": "Pacer bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PACER_API }}/internal/recordatorios/{{ $('Vencidos').item.json.id }}/confirmar",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id_mensaje_proveedor: String($json.result?.message_id ?? '') }) }}",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Confirmar entrega",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 0],
+      "notes": "Se confirma DESPUES de que Telegram acepto el mensaje, nunca antes. Repetir la llamada devuelve entregado:false en vez de reenviar, y eso es lo que vuelve seguro el reintento automatico.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pacer-token",
+          "name": "Pacer token interno"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada 15 minutos": {
+      "main": [[{ "node": "Materializar", "type": "main", "index": 0 }]]
+    },
+    "Materializar": {
+      "main": [[{ "node": "Vencidos", "type": "main", "index": 0 }]]
+    },
+    "Vencidos": {
+      "main": [[{ "node": "Tiene a quien escribirle", "type": "main", "index": 0 }]]
+    },
+    "Tiene a quien escribirle": {
+      "main": [[{ "node": "Mandar por Telegram", "type": "main", "index": 0 }]]
+    },
+    "Mandar por Telegram": {
+      "main": [[{ "node": "Confirmar entrega", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
