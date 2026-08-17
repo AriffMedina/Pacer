@@ -44,6 +44,15 @@ class Configuracion(BaseSettings):
 
     groq_api_key: str = ""
     telegram_bot_token: str = ""
+
+    # Telegram entrega cada actualización a UN solo `getUpdates`. Dos procesos
+    # con el mismo token se pelean los mensajes, y desde fuera eso se ve como
+    # un bot que contesta dos veces —pasó de verdad: el portátil y el servidor
+    # respondiendo lo mismo con planes distintos, cada uno mirando su base—.
+    # Poner esto en `false` en la máquina de desarrollo deja el token en su
+    # sitio y calla el sondeo, que es lo que uno quiere mientras hay un
+    # despliegue vivo.
+    telegram_sondeo: bool = True
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     # Langfuse Cloud entrega LANGFUSE_BASE_URL; el SDK histórico usa
@@ -63,7 +72,7 @@ class Configuracion(BaseSettings):
 
     @property
     def telegram_disponible(self) -> bool:
-        return bool(self.telegram_bot_token)
+        return bool(self.telegram_bot_token) and self.telegram_sondeo
 
     @property
     def langfuse_url(self) -> str:
