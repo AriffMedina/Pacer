@@ -590,6 +590,15 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .ajustes .cuenta .nota{font-size:11.5px;color:var(--texto-3);margin-top:3px;line-height:1.45}
 .ajustes .cuenta .aviso-cuenta{font-size:11.5px;color:#FF8A8A;margin-top:7px;display:none}
 .ajustes .cuenta .aviso-cuenta.on{display:block}
+/* El código se dicta y se teclea: grande, monoespaciado y con las cifras
+   separadas, para no confundir un 0 con una O al leerlo en voz alta. */
+.codigo-tg{margin-top:10px;text-align:center;padding:11px;border-radius:12px;
+  border:1px dashed var(--linea-fuerte);
+  background:color-mix(in srgb,var(--acento) 6%,transparent)}
+.codigo-tg b{display:block;font-family:'JetBrains Mono',monospace;font-size:26px;
+  letter-spacing:.22em;color:var(--acento);font-variant-numeric:tabular-nums}
+.codigo-tg small{display:block;margin-top:6px;font-size:11px;color:var(--texto-2);
+  line-height:1.45}
 
 /* Tarjetas del lateral */
 .tarjeta{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);padding:16px}
@@ -1268,6 +1277,17 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
             </button>
           </div>
         </div>
+        <!-- Sin esto, la web y Telegram son dos personas distintas: armas el
+             plan aquí, le escribes al bot y el bot no sabe quién eres. -->
+        <div class="grupo cuenta" id="grupo-telegram">
+          <span class="quien" data-t="tg.titulo">Telegram</span>
+          <p class="nota" data-t="tg.explica">Conecta este navegador con tu chat
+            para llevarte el mismo plan y recibir los recordatorios.</p>
+          <div class="par">
+            <button id="btn-codigo" data-t="tg.pedir">Generar código</button>
+          </div>
+          <div class="codigo-tg" id="codigo-tg" hidden></div>
+        </div>
         <div class="grupo cuenta" id="grupo-cuenta"></div>
       </div>
     </div>
@@ -1330,8 +1350,12 @@ const T = {
     'h4.r':'Si no queda tiempo para prepararla bien, te dice cuántas semanas hacen falta y por qué.',
     'tg.titulo':'También te busca él a ti.',
     'tg.sub':'El día después de cada sesión te pregunta por Telegram cómo te fue. Contestas con texto o con una nota de voz y el plan reacciona igual que en la web.',
+    'tg.titulo':'Telegram','tg.pedir':'Generar código',
+    'tg.explica':'Conecta este navegador con tu chat para llevarte el mismo plan y recibir los recordatorios.',
+    'tg.manda':'Mándaselo al bot en los próximos {min} minutos. Se usa una sola vez.',
+    'tg.falla':'No se pudo generar el código. Inténtalo otra vez.',
     'tg1.t':'Abre el bot','tg1.p':'Busca tu bot de Pacer en Telegram y entra a la conversación.',
-    'tg2.t':'Manda <code>/start</code>','tg2.p':'Te saluda por tu nombre y te dice qué toca hoy. Es la misma cuenta y el mismo plan que en la web.',
+    'tg2.t':'Pega tu código','tg2.p':'En la app, ajustes → Telegram → Generar código. Se lo mandas al bot y ese chat pasa a ser tú: mismo plan, misma conversación.',
     'tg3.t':'Habla normal','tg3.p':'Texto o nota de voz, como le hables a una persona. Nada de comandos que memorizar.',
     'tg.estado':'en línea',
     'tgc.1':'Hola Ari. Hoy te toca una fácil de 6.6 kilómetros. ¿Ya la corriste?',
@@ -1436,8 +1460,12 @@ const T = {
     'h4.r':'If there is not enough time to prepare it properly, it tells you how many weeks it takes and why.',
     'tg.titulo':'It reaches out to you too.',
     'tg.sub':'The day after each session it asks on Telegram how it went. Answer with text or a voice note and the plan reacts just like on the web.',
+    'tg.titulo':'Telegram','tg.pedir':'Get a code',
+    'tg.explica':'Link this browser to your chat to carry the same plan and get reminders.',
+    'tg.manda':'Send it to the bot within {min} minutes. It works only once.',
+    'tg.falla':'The code could not be generated. Try again.',
     'tg1.t':'Open the bot','tg1.p':'Find your Pacer bot on Telegram and open the chat.',
-    'tg2.t':'Send <code>/start</code>','tg2.p':'It greets you by name and tells you what is on today. Same account, same plan as the web.',
+    'tg2.t':'Paste your code','tg2.p':'In the app, settings → Telegram → Get a code. Send it to the bot and that chat becomes you: same plan, same conversation.',
     'tg3.t':'Just talk','tg3.p':'Text or a voice note, the way you would talk to a person. No commands to memorise.',
     'tg.estado':'online',
     'tgc.1':'Hi Ari. Today is an easy 6.6 kilometres. Have you run it yet?',
@@ -1702,6 +1730,24 @@ function abrirCuenta(){
   if (!cuenta?.email) setTimeout(() => $('#cta-email')?.focus(), 120);
 }
 $('#btn-cuenta').onclick = (e) => { e.stopPropagation(); abrirCuenta(); };
+
+/* El código que le dices al bot para que sepa que ese chat eres tú. */
+$('#btn-codigo').onclick = async () => {
+  const boton = $('#btn-codigo'), caja = $('#codigo-tg');
+  boton.disabled = true;
+  try {
+    const r = await fetch('/api/telegram/codigo', {method:'POST'});
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    caja.innerHTML = `<b>${escapar(d.codigo)}</b><small>${t('tg.manda')
+      .replace('{min}', d.minutos)}</small>`;
+    caja.hidden = false;
+  } catch (err) {
+    caja.innerHTML = `<small>${t('tg.falla')}</small>`;
+    caja.hidden = false;
+    anotar('no se pudo pedir el código de Telegram: ' + err.message);
+  } finally { boton.disabled = false; }
+};
 $('#landing-sesion').onclick = () => { entrarApp(); setTimeout(abrirCuenta, 260); };
 
 /* Voz ⇄ texto. El mismo coach cambiando de canal, no otra vista: lo único

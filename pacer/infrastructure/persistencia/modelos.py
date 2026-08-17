@@ -48,6 +48,21 @@ class CorredorORM(Base):
         unique=True, index=True, default=None
     )
 
+    # El código de un solo uso que une este corredor con un chat de Telegram.
+    # Vive en la fila y no en memoria a propósito: la app corre en más de un
+    # proceso y un diccionario en RAM haría que el código funcionara o no
+    # según qué worker atendiera el canje. UNIQUE porque dos corredores con el
+    # mismo código serían dos personas peleándose una identidad.
+    codigo_telegram: Mapped[str | None] = mapped_column(
+        unique=True, index=True, default=None
+    )
+    # MOMENTO y no un DateTime pelado: `reloj.ahora()` devuelve fecha CON zona,
+    # y comparar una con zona contra una sin zona lanza TypeError. El canje
+    # habría reventado la primera vez que alguien lo usara.
+    codigo_telegram_caduca: Mapped[datetime | None] = mapped_column(
+        MOMENTO, default=None
+    )
+
     # Perfil. Son hechos del corredor, no conversación, así que son columnas.
     nombre: Mapped[str | None] = mapped_column(default=None)
     objetivo: Mapped[str | None] = mapped_column(default=None)

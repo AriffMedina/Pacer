@@ -35,13 +35,27 @@ services:
       DATABASE_URL: postgresql+asyncpg://pacer:${POSTGRES_PASSWORD}@postgres:5432/pacer
 
   n8n:
-    # Sin puerto publicado: n8n no trae autenticación por defecto y dejarlo
-    # abierto sería regalar un ejecutor de workflows con acceso a la API.
-    # Para administrarlo, un túnel desde tu máquina:
-    #   ssh -i ~/.ssh/pacer-ec2.pem -L 5678:localhost:5678 ec2-user@<ip>
-    ports: !reset []
+    # Publicado SOLO en loopback. Dejarlo abierto al mundo sería regalar un
+    # ejecutor de workflows con acceso a la API interna; quitarle el puerto
+    # del todo, en cambio, tampoco sirve: el túnel SSH entrega en el
+    # `localhost` DEL SERVIDOR, así que si nadie escucha ahí, el túnel conecta
+    # contra un puerto muerto y parece que el fallo está en tu máquina.
+    #
+    # Con 127.0.0.1 el puerto existe para el servidor y no para internet, que
+    # es justo lo que necesita:
+    #   ssh -i ~/.ssh/pacer-ec2.pem -L 5679:localhost:5678 -N ec2-user@<ip>
+    #   luego abre http://localhost:5679
+    ports: !override
+      - "127.0.0.1:5678:5678"
     environment:
       N8N_SECURE_COOKIE: "false"
+      # n8n 2.x bloquea `$env` dentro de los nodos por defecto, y el workflow
+      # arma sus URLs con `{{ $env.PACER_API }}`. Se habilita porque aquí no
+      # revela nada: el entorno de ESTE contenedor solo tiene zona horaria,
+      # banderas y la URL interna de la API. Los secretos —token de Telegram y
+      # token interno— viven cifrados en las credenciales de n8n, que es
+      # justamente donde deben estar y a donde esta bandera no da acceso.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
 
   caddy:
     image: caddy:2-alpine
