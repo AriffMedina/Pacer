@@ -5,7 +5,7 @@ punto del plan está el corredor. Evita más alucinaciones que cualquier
 instrucción escrita en el prompt.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from pacer.domain.entidades.carrera import Carrera, pendientes
 from pacer.domain.entidades.perfil import Perfil
@@ -71,6 +71,7 @@ def construir_bloque(
         lineas += [
             _linea_de_encabezado(hoy, numero, len(plan.semanas), fecha_carrera),
             _linea_de_hoy(sesiones, hoy),
+            _linea_de_manana(sesiones, hoy),
             _linea_siguiente(sesiones, hoy),
             _linea_ultima_completada(sesiones),
         ]
@@ -180,19 +181,47 @@ def _semana_de(plan: Plan, hoy: date) -> Semana | None:
 def _linea_de_hoy(sesiones: list[Sesion], hoy: date) -> str:
     de_hoy = next((s for s in sesiones if s.fecha == hoy), None)
     if de_hoy is None:
-        return "SESIÓN DE HOY: descanso"
-    estado = "completada" if de_hoy.completada else "pendiente"
-    return f"SESIÓN DE HOY: {de_hoy.tipo} {de_hoy.km} km ({estado})"
+        return "SESIÓN DE HOY: descanso, no toca correr"
+    estado = "ya completada" if de_hoy.completada else "todavía pendiente"
+    return f"SESIÓN DE HOY: {de_hoy.tipo} de {de_hoy.km} km ({estado})"
+
+
+def _linea_de_manana(sesiones: list[Sesion], hoy: date) -> str:
+    """Qué toca mañana, dicho aunque no toque nada.
+
+    "¿Qué me toca mañana?" es la pregunta más frecuente que hay, y sin línea
+    propia el modelo la contestaba con la SIGUIENTE sesión —que podía ser dos
+    días después— anunciando un entrenamiento en un día de descanso.
+    """
+    manana = hoy + timedelta(days=1)
+    cabeza = f"SESIÓN DE MAÑANA ({_fecha_hablada(manana)})"
+
+    de_manana = next((s for s in sesiones if s.fecha == manana), None)
+    if de_manana is None:
+        return f"{cabeza}: descanso, no toca correr"
+    return f"{cabeza}: {de_manana.tipo} de {de_manana.km} km"
 
 
 def _linea_siguiente(sesiones: list[Sesion], hoy: date) -> str:
+    """La siguiente sesión con la fecha COMPLETA y ya situada.
+
+    Antes daba solo el día de la semana y el modelo deducía el resto: siendo
+    domingo llegó a decir "mañana es martes". Se le da todo hecho —cuándo es,
+    qué día cae y cuántos faltan— para que no le quede nada que calcular.
+    """
     siguiente = next(
         (s for s in sesiones if s.fecha > hoy and not s.completada), None
     )
     if siguiente is None:
         return "SIGUIENTE: no quedan sesiones"
-    dia = DIAS[siguiente.fecha.weekday()]
-    return f"SIGUIENTE: {dia}, {siguiente.tipo} {siguiente.km} km"
+
+    faltan = (siguiente.fecha - hoy).days
+    cuando = (
+        f"mañana {_fecha_hablada(siguiente.fecha)}"
+        if faltan == 1
+        else f"{_fecha_hablada(siguiente.fecha)}, en {faltan} días"
+    )
+    return f"SIGUIENTE SESIÓN: {cuando} — {siguiente.tipo} de {siguiente.km} km"
 
 
 def _linea_ultima_completada(sesiones: list[Sesion]) -> str:

@@ -463,6 +463,23 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   font-family:'JetBrains Mono',monospace}
 .metricas{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
 
+/* Todas las semanas de un vistazo. Ver solo la actual esconde la forma del
+   plan: dónde sube, dónde descansa y dónde afloja antes de la carrera. */
+.tira-semanas{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px}
+.pastilla{width:34px;height:34px;border-radius:10px;font-size:12.5px;
+  border:1px solid var(--linea);background:var(--tarjeta);color:var(--texto-3);
+  font-family:'JetBrains Mono',monospace;
+  transition:color .18s var(--curva),border-color .18s var(--curva)}
+.pastilla:hover{color:var(--texto);border-color:var(--linea-fuerte)}
+.pastilla.descarga{background:repeating-linear-gradient(45deg,
+  rgba(255,255,255,.07) 0 3px,transparent 3px 6px)}
+:root[data-tema="claro"] .pastilla.descarga{background:repeating-linear-gradient(45deg,
+  rgba(11,15,13,.07) 0 3px,transparent 3px 6px)}
+/* La semana en curso siempre se distingue, aunque estés mirando otra. */
+.pastilla.ahora{color:var(--acento);border-color:rgba(198,249,74,.4)}
+.pastilla.puesta{background:var(--lima);color:var(--sobre-lima);border-color:transparent;
+  box-shadow:0 0 18px rgba(198,249,74,.28)}
+
 /* Diagnóstico: NUNCA se abre solo. Solo por el engrane. */
 .cajon{display:none;border-top:1px solid var(--linea);padding:14px 30px;
   max-height:30dvh;overflow-y:auto;background:rgba(0,0,0,.28)}
@@ -655,6 +672,7 @@ let turnos = [];                // últimos dichos, para el diálogo
 let vista = 'coach';
 let ocupado = false;
 let escribiendo = false;
+let semanaVista = null;         // semana del plan que se está mirando
 let mesVisible = null;          // primer día del mes que muestra el calendario
 let diaElegido = null;          // ISO del día sobre el que se está apuntando
 
@@ -1178,7 +1196,10 @@ const sinPlanAun = `<p class="vacio" style="padding-top:20px">
 
 function pintarPlan(){
   if (!datos.hay_plan){ $('#v-plan').innerHTML = sinPlanAun; return; }
-  const semana = datos.semanas.find((s) => s.numero === datos.semana_actual) || datos.semanas[0];
+  // La vista arranca en la semana en curso, pero se puede recorrer el plan
+  // entero: ver solo una semana esconde la forma del entrenamiento.
+  if (semanaVista == null) semanaVista = datos.semana_actual;
+  const semana = datos.semanas.find((s) => s.numero === semanaVista) || datos.semanas[0];
 
   $('#v-plan').innerHTML = `
     <div class="encabezado-hoja">
@@ -1195,14 +1216,23 @@ function pintarPlan(){
             Puedes verlo entero desde ahora; hasta esa fecha sigue como vas, sin subir carga.</p>
         </div>
       </div>`}
+    <div class="tira-semanas">
+      ${datos.semanas.map((s) => `
+        <button class="pastilla${s.numero === semanaVista ? ' puesta' : ''}${
+          s.numero === datos.semana_actual ? ' ahora' : ''}${
+          s.es_descarga ? ' descarga' : ''}" data-semana="${s.numero}"
+          title="Semana ${s.numero} · ${NOMBRE_BLOQUE[s.bloque] || 'sin bloque'} · ${s.km_total} km${
+            s.es_descarga ? ' (descarga)' : ''}">${s.numero}</button>`).join('')}
+    </div>
     <div class="metricas">
-      ${dato(datos.arrancado ? 'Semana' : 'Primera semana',
-             `${datos.semana_actual} / ${datos.semanas_totales}`)}
+      ${dato('Semana', `${semana.numero} / ${datos.semanas_totales}`)}
       ${dato('Bloque', NOMBRE_BLOQUE[semana.bloque] || '—')}
       ${dato('Volumen', semana.km_total + ' km')}
     </div>
-    ${datos.motivo_cambio ? `<p class="vacio" style="margin:4px 0 14px">
-      ${escapar(datos.motivo_cambio)}</p>` : ''}
+    ${semana.es_descarga ? `<p class="vacio" style="margin:0 0 12px">
+      Semana de descarga: bajar la carga a propósito es parte del plan, no un hueco.</p>` : ''}
+    ${datos.motivo_cambio && semana.numero === datos.semana_actual
+      ? `<p class="vacio" style="margin:4px 0 14px">${escapar(datos.motivo_cambio)}</p>` : ''}
     <div class="forma" id="forma-borrar">
       <p class="titulo">¿Seguro que quieres borrar este plan?</p>
       <p class="vacio" style="margin-top:7px">Se van las ${datos.semanas_totales} semanas
@@ -1217,6 +1247,9 @@ function pintarPlan(){
 
   $('#btn-borrar-plan').onclick = () => $('#forma-borrar').classList.add('abierta');
   $('#confirmar-borrado').onclick = borrarPlan;
+  document.querySelectorAll('#v-plan .pastilla').forEach((b) => {
+    b.onclick = () => { semanaVista = Number(b.dataset.semana); pintarPlan(); };
+  });
   conectarSesiones('#v-plan');
 }
 

@@ -41,6 +41,84 @@ def plan_de_prueba() -> Plan:
     return Plan(version=1, semanas=(semana_uno, semana_dos))
 
 
+def test_dice_que_pasa_manana_aunque_sea_descanso() -> None:
+    """"¿Qué me toca mañana?" es la pregunta más frecuente que hay.
+
+    Sin una línea propia, el modelo respondía pegando la fecha de mañana a la
+    siguiente sesión —que era dos días después— y anunciaba un entrenamiento
+    en un día de descanso.
+    """
+    plan = Plan(
+        version=1,
+        semanas=(
+            Semana(
+                numero=1,
+                sesiones=(Sesion(fecha=date(2026, 8, 22), tipo="facil", km=7.2),),
+            ),
+        ),
+    )
+
+    bloque = construir_bloque(plan, hoy=date(2026, 8, 20))
+
+    assert "SESIÓN DE MAÑANA (viernes 21 de agosto de 2026): descanso" in bloque
+
+
+def test_si_manana_si_hay_sesion_la_nombra() -> None:
+    plan = Plan(
+        version=1,
+        semanas=(
+            Semana(
+                numero=1,
+                sesiones=(Sesion(fecha=date(2026, 8, 21), tipo="calidad", km=9.6),),
+            ),
+        ),
+    )
+
+    bloque = construir_bloque(plan, hoy=date(2026, 8, 20))
+
+    assert "SESIÓN DE MAÑANA (viernes 21 de agosto de 2026): calidad de 9.6 km" in bloque
+
+
+def test_la_siguiente_sesion_viene_con_la_fecha_entera() -> None:
+    """Reportado dos veces: siendo domingo dijo "mañana es martes".
+
+    La línea daba solo el día de la semana y el modelo deducía el resto. Todo
+    lo que se le deja deducir, lo deduce mal: se le da masticado.
+    """
+    plan = Plan(
+        version=1,
+        semanas=(
+            Semana(
+                numero=1,
+                sesiones=(Sesion(fecha=date(2026, 8, 21), tipo="facil", km=1.7),),
+            ),
+        ),
+    )
+
+    bloque = construir_bloque(plan, hoy=date(2026, 8, 20))
+
+    assert "mañana viernes 21 de agosto de 2026" in bloque
+    assert "1.7 km" in bloque
+
+
+def test_una_sesion_mas_lejana_no_se_llama_manana() -> None:
+    plan = Plan(
+        version=1,
+        semanas=(
+            Semana(
+                numero=1,
+                sesiones=(Sesion(fecha=date(2026, 8, 24), tipo="largo", km=12.0),),
+            ),
+        ),
+    )
+
+    bloque = construir_bloque(plan, hoy=date(2026, 8, 20))
+
+    assert "mañana" not in bloque
+    assert "lunes 24 de agosto de 2026" in bloque
+    assert "en 4 días" in bloque
+
+
 def test_siempre_dice_el_ano_en_que_estamos() -> None:
     """El fallo más caro que ha tenido esto.
 
@@ -106,13 +184,14 @@ def test_indica_los_dias_que_faltan_para_la_carrera() -> None:
 def test_nombra_la_sesion_de_hoy() -> None:
     bloque = construir_bloque(plan_de_prueba(), hoy=HOY, fecha_carrera=CARRERA)
 
-    assert "SESIÓN DE HOY: largo 14.0 km (pendiente)" in bloque
+    assert "SESIÓN DE HOY: largo de 14.0 km (todavía pendiente)" in bloque
 
 
 def test_nombra_la_siguiente_sesion() -> None:
     bloque = construir_bloque(plan_de_prueba(), hoy=HOY, fecha_carrera=CARRERA)
 
-    assert "SIGUIENTE: sábado, facil 6.0 km" in bloque
+    assert "SIGUIENTE SESIÓN: sábado 22 de agosto de 2026, en 2 días" in bloque
+    assert "facil de 6.0 km" in bloque
 
 
 def test_nombra_la_ultima_completada_con_su_sensacion() -> None:
