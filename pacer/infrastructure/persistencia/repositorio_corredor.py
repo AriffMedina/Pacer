@@ -1,6 +1,7 @@
 """Repositorio del corredor y de su conversación."""
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pacer.domain.entidades.corredor import Corredor
 from pacer.domain.entidades.perfil import Nivel, Objetivo, Perfil
+from pacer.domain.servicios.vinculacion import vigente
 from pacer.infrastructure.persistencia.modelos import ConversacionORM, CorredorORM
 
 CAMPOS_DE_PERFIL = (
@@ -123,6 +125,62 @@ class RepositorioCorredor:
             fila.clave_sesion = clave
         await self._sesion.commit()
 
+    async def guardar_codigo_telegram(
+        self, corredor_id: int, codigo: str, caduca: datetime
+    ) -> None:
+        """Deja un código de un solo uso listo para canjear.
+
+        Pedir uno nuevo mata al anterior porque la columna es una sola: dos
+        códigos vivos para el mismo corredor serían dos llaves de su cuenta
+        dando vueltas, y la vieja es justo la que ya dictó en voz alta.
+        """
+        fila = await self._sesion.get(CorredorORM, corredor_id)
+        if fila is None:
+            raise ValueError(f"no existe el corredor {corredor_id}")
+
+        fila.codigo_telegram = codigo
+        # Se guarda SIEMPRE en UTC: así el instante no depende de en qué zona
+        # corría el proceso que lo escribió.
+        fila.codigo_telegram_caduca = caduca.astimezone(UTC)
+        await self._sesion.commit()
+
+    async def canjear_codigo_telegram(
+        self, codigo: str, chat_id: int, ahora: datetime
+    ) -> Corredor | None:
+        """Ata el chat al corredor dueño del código. `None` si no se pudo.
+
+        Un solo `None` para todo lo que falla —código inexistente, expirado o
+        ya usado— a propósito: distinguirlos por fuera sería regalar una forma
+        de averiguar qué códigos existen.
+
+        El chat se MUDA. Si ya le habías escrito al bot antes de vincular, ese
+        chat ya tenía su propio corredor, y `telegram_chat_id` es UNIQUE: sin
+        soltarlo del anterior el canje revienta contra el índice.
+        """
+        consulta = select(CorredorORM).where(CorredorORM.codigo_telegram == codigo)
+        fila = (await self._sesion.execute(consulta)).scalar_one_or_none()
+
+        if fila is None or not vigente(_con_zona(fila.codigo_telegram_caduca), ahora):
+            return None
+
+        previo = (
+            await self._sesion.execute(
+                select(CorredorORM).where(CorredorORM.telegram_chat_id == chat_id)
+            )
+        ).scalar_one_or_none()
+        if previo is not None and previo.id != fila.id:
+            previo.telegram_chat_id = None
+            await self._sesion.flush()
+
+        fila.telegram_chat_id = chat_id
+        # El código muere al usarse: si sobreviviera, quien lo viera por encima
+        # del hombro entraría a la conversación de otro.
+        fila.codigo_telegram = None
+        fila.codigo_telegram_caduca = None
+        await self._sesion.commit()
+
+        return _a_dominio(fila)
+
     async def con_telegram(self) -> list[Corredor]:
         """Los corredores que tienen un chat al que escribirles."""
         consulta = select(CorredorORM).where(CorredorORM.telegram_chat_id.isnot(None))
@@ -178,6 +236,22 @@ class RepositorioCorredor:
                 for fila in reversed(filas)
             ]
         )
+
+
+def _con_zona(momento: datetime | None) -> datetime | None:
+    """Devuelve el instante con zona, venga de donde venga.
+
+    Postgres respeta `DateTime(timezone=True)` y devuelve el instante con su
+    offset. SQLite NO: guarda una cadena y lo devuelve ingenuo aunque la
+    columna lo declare. Comparar uno ingenuo con uno consciente lanza
+    TypeError, así que lo mismo funcionaba en producción y reventaba en las
+    pruebas — o al revés, que es peor.
+
+    Se guarda en UTC, así que asumir UTC al leer recupera el instante exacto.
+    """
+    if momento is None or momento.tzinfo is not None:
+        return momento
+    return momento.replace(tzinfo=UTC)
 
 
 def _conversacion_valida(historial: list[dict[str, Any]]) -> list[dict[str, Any]]:

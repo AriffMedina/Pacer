@@ -41,11 +41,20 @@ from pacer.domain.puertos.voz import ErrorDeTranscripcion
 from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
 from pacer.domain.servicios.prescripcion import prescribir
 from pacer.domain.servicios.tablero import Tablero, resumir
+from pacer.domain.servicios.vinculacion import (
+    DURACION,
+    generar_codigo,
+    vence_en,
+)
+from pacer.domain.servicios.vinculacion import (
+    LARGO as LARGO_CODIGO,
+)
 from pacer.infrastructure.persistencia.esquema import agregar_columnas_nuevas
 from pacer.infrastructure.persistencia.modelos import Base
 from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 from pacer.infrastructure.persistencia.repositorio_carrera import RepositorioCarrera
 from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
+from pacer.infrastructure.reloj import ahora as ahora_del_corredor
 from pacer.infrastructure.reloj import hoy as hoy_del_corredor
 from pacer.infrastructure.seguridad import (
     ClaveInvalida,
@@ -263,6 +272,51 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
     await motor.dispose()
 
 
+def _parece_codigo(texto: str | None) -> bool:
+    """Seis dígitos y nada más. Se mira antes de gastar un turno del modelo.
+
+    Acepta `None` porque un mensaje de Telegram puede no traer texto: una foto,
+    un sticker o un audio llegan con `texto` vacío.
+    """
+    limpio = (texto or "").strip()
+    return len(limpio) == LARGO_CODIGO and limpio.isdigit()
+
+
+async def _canjear(
+    corredores: RepositorioCorredor, mensaje: MensajeEntrante
+) -> bool:
+    """Intenta unir este chat al corredor dueño del código. Si no era un
+    código, devuelve False y el mensaje sigue su camino normal.
+
+    Un código equivocado se responde y se corta: mandarlo al coach haría que
+    el modelo improvisara sobre seis dígitos que no significan nada para él.
+    """
+    if not _parece_codigo(mensaje.texto):
+        return False
+
+    corredor = await corredores.canjear_codigo_telegram(
+        (mensaje.texto or "").strip(), mensaje.chat_id, ahora_del_corredor()
+    )
+
+    if corredor is None:
+        app.state.telegram.enviar(
+            mensaje.chat_id,
+            "Ese código no sirve o ya caducó. Pide uno nuevo en la app "
+            "y mándamelo dentro de los próximos minutos.",
+        )
+        return True
+
+    nombre = corredor.perfil.nombre
+    app.state.telegram.enviar(
+        mensaje.chat_id,
+        f"Listo{', ' + nombre if nombre else ''}. Este chat ya eres tú: "
+        "tenemos el mismo plan y la misma conversación que en la app, y "
+        "los recordatorios te van a llegar por aquí.",
+    )
+    registro.info("telegram vinculado al corredor %s", corredor.id)
+    return True
+
+
 def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
     """Escucha Telegram en segundo plano mientras la app viva."""
     canal = app.state.telegram
@@ -274,6 +328,13 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
 
         async with app.state.fabrica() as bd:
             corredores = RepositorioCorredor(bd)
+
+            # Un código se canjea, no se conversa. Va ANTES de resolver el
+            # corredor: si primero llamáramos a `obtener_o_crear`, el chat ya
+            # tendría dueño nuevo y el canje tendría que deshacerlo.
+            if await _canjear(corredores, mensaje):
+                return
+
             # Cada chat de Telegram es su propio corredor: antes todos
             # caían en el mismo y se leían la conversación entre sí.
             corredor = await corredores.obtener_o_crear(mensaje.chat_id)
@@ -770,6 +831,32 @@ async def cuenta(request: Request) -> dict[str, Any]:
             _clave(request)
         )
     return {"email": corredor.email, "nombre": corredor.perfil.nombre}
+
+
+@app.post("/api/telegram/codigo")
+async def codigo_telegram(request: Request) -> dict[str, Any]:
+    """Un código para que el bot sepa que ese chat eres tú.
+
+    Sin esto cada canal creaba su propio corredor: armabas el plan hablando
+    por la web, le escribías al bot y el bot te atendía como a un desconocido.
+    Y como los recordatorios salen de `telegram_chat_id`, quien solo usaba la
+    web no recibía ninguno jamás.
+    """
+    ahora = ahora_del_corredor()
+    codigo = generar_codigo()
+
+    async with app.state.fabrica() as bd:
+        corredores = RepositorioCorredor(bd)
+        corredor = await corredores.obtener_o_crear_por_sesion(_clave(request))
+        await corredores.guardar_codigo_telegram(
+            corredor.id, codigo, vence_en(ahora)
+        )
+
+    return {
+        "codigo": codigo,
+        "minutos": int(DURACION.total_seconds() // 60),
+        "ya_vinculado": corredor.telegram_chat_id is not None,
+    }
 
 
 @app.post("/api/cuenta/registro")
