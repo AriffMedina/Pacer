@@ -247,6 +247,12 @@ h2.rotulo{
 .paso-tg .n{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--acento);
   padding-top:2px;flex:none}
 .paso-tg h4{font-size:15.5px;font-weight:600}
+/* El nombre del bot es lo único accionable de la sección: si no se distingue
+   del texto, nadie descubre que se puede tocar. */
+.paso-tg a{color:var(--acento);text-decoration:underline;
+  text-underline-offset:3px;text-decoration-thickness:1px;
+  transition:opacity .2s var(--salida)}
+.paso-tg a:hover{opacity:.7}
 .paso-tg p{font-size:14px;color:var(--texto-2);line-height:1.55;margin-top:5px}
 .paso-tg code{font-family:'JetBrains Mono',monospace;font-size:13px;
   background:var(--lima-suave);color:var(--acento);padding:2px 7px;border-radius:6px}
@@ -1354,7 +1360,7 @@ const T = {
     'tg.explica':'Conecta este navegador con tu chat para llevarte el mismo plan y recibir los recordatorios.',
     'tg.manda':'Mándaselo al bot en los próximos {min} minutos. Se usa una sola vez.',
     'tg.falla':'No se pudo generar el código. Inténtalo otra vez.',
-    'tg1.t':'Abre el bot','tg1.p':'Busca tu bot de Pacer en Telegram y entra a la conversación.',
+    'tg1.t':'Abre el bot','tg1.p':'Búscalo en Telegram como <a href="https://t.me/Pacer_Coaching_Bot" target="_blank" rel="noopener">@Pacer_Coaching_Bot</a> y entra a la conversación.',
     'tg2.t':'Pega tu código','tg2.p':'En la app, ajustes → Telegram → Generar código. Se lo mandas al bot y ese chat pasa a ser tú: mismo plan, misma conversación.',
     'tg3.t':'Habla normal','tg3.p':'Texto o nota de voz, como le hables a una persona. Nada de comandos que memorizar.',
     'tg.estado':'en línea',
@@ -1464,7 +1470,7 @@ const T = {
     'tg.explica':'Link this browser to your chat to carry the same plan and get reminders.',
     'tg.manda':'Send it to the bot within {min} minutes. It works only once.',
     'tg.falla':'The code could not be generated. Try again.',
-    'tg1.t':'Open the bot','tg1.p':'Find your Pacer bot on Telegram and open the chat.',
+    'tg1.t':'Open the bot','tg1.p':'Find it on Telegram as <a href="https://t.me/Pacer_Coaching_Bot" target="_blank" rel="noopener">@Pacer_Coaching_Bot</a> and open the chat.',
     'tg2.t':'Paste your code','tg2.p':'In the app, settings → Telegram → Get a code. Send it to the bot and that chat becomes you: same plan, same conversation.',
     'tg3.t':'Just talk','tg3.p':'Text or a voice note, the way you would talk to a person. No commands to memorise.',
     'tg.estado':'online',
