@@ -49,6 +49,13 @@ services:
       - "127.0.0.1:5678:5678"
     environment:
       N8N_SECURE_COOKIE: "false"
+      # n8n 2.x bloquea `$env` dentro de los nodos por defecto, y el workflow
+      # arma sus URLs con `{{ $env.PACER_API }}`. Se habilita porque aquí no
+      # revela nada: el entorno de ESTE contenedor solo tiene zona horaria,
+      # banderas y la URL interna de la API. Los secretos —token de Telegram y
+      # token interno— viven cifrados en las credenciales de n8n, que es
+      # justamente donde deben estar y a donde esta bandera no da acceso.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
 
   caddy:
     image: caddy:2-alpine
