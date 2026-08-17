@@ -20,6 +20,7 @@ from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
 from pacer.domain.reglas.duracion import PlanImposible
 from pacer.domain.servicios.ajustador import ajustar
 from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
+from pacer.domain.servicios.generador_plan import COMPOSICION
 from pacer.domain.servicios.mover import (
     MovimientoImposible,
     dias_libres,
@@ -480,6 +481,13 @@ def _generar(
         nuevo = crear_plan(perfil, hoy=hoy)
     except PlanImposible as rechazo:
         return None, _no_hay_plan(rechazo)
+    except ValueError as limite:
+        # Un límite del sistema se EXPLICA, no se estrella. Pasó con la app ya
+        # pública: alguien dijo que podía entrenar cinco días, el generador solo
+        # compone 3 o 4, y el ValueError subió hasta convertirse en un 500. Desde
+        # el navegador eso se ve como "se cortó la conexión": sin explicación y
+        # sin nada que hacer.
+        return None, _fuera_de_lo_que_se_puede(limite)
 
     # El generador siempre devuelve v1, pero `version_activa` toma la MAYOR: un
     # plan nuevo tiene que quedar por encima de su propia historia o la app
@@ -515,6 +523,31 @@ def _generar(
         )
 
     return nuevo, resultado
+
+
+def _fuera_de_lo_que_se_puede(limite: ValueError) -> dict[str, Any]:
+    """Lo que se le devuelve al modelo cuando pide algo que el generador no sabe
+    componer — hoy, un número de días sin composición definida.
+
+    Se le dan los valores que SÍ existen, sacados de la propia tabla del
+    dominio y no de una lista escrita a mano: sin alternativas, el coach solo
+    sabría decir que no, y el corredor quedaría tan atascado como con el 500
+    pero con mejores modales.
+    """
+    return {
+        "error": "fuera_de_lo_que_se_puede",
+        "motivo": str(limite),
+        "dias_admitidos": sorted(COMPOSICION),
+        "razon_para_explicar": (
+            "Solo sé componer semanas de 3 o 4 días de carrera. Con más días la "
+            "distribución de carga y descanso deja de estar validada, y prefiero "
+            "no inventarla."
+        ),
+        "alternativas": [
+            "entrenar 4 días y usar los que sobran para caminar o nadar",
+            "entrenar 3 días si la semana viene apretada",
+        ],
+    }
 
 
 def _no_hay_plan(rechazo: PlanImposible) -> dict[str, Any]:
