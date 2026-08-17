@@ -35,11 +35,18 @@ services:
       DATABASE_URL: postgresql+asyncpg://pacer:${POSTGRES_PASSWORD}@postgres:5432/pacer
 
   n8n:
-    # Sin puerto publicado: n8n no trae autenticación por defecto y dejarlo
-    # abierto sería regalar un ejecutor de workflows con acceso a la API.
-    # Para administrarlo, un túnel desde tu máquina:
-    #   ssh -i ~/.ssh/pacer-ec2.pem -L 5678:localhost:5678 ec2-user@<ip>
-    ports: !reset []
+    # Publicado SOLO en loopback. Dejarlo abierto al mundo sería regalar un
+    # ejecutor de workflows con acceso a la API interna; quitarle el puerto
+    # del todo, en cambio, tampoco sirve: el túnel SSH entrega en el
+    # `localhost` DEL SERVIDOR, así que si nadie escucha ahí, el túnel conecta
+    # contra un puerto muerto y parece que el fallo está en tu máquina.
+    #
+    # Con 127.0.0.1 el puerto existe para el servidor y no para internet, que
+    # es justo lo que necesita:
+    #   ssh -i ~/.ssh/pacer-ec2.pem -L 5679:localhost:5678 -N ec2-user@<ip>
+    #   luego abre http://localhost:5679
+    ports: !override
+      - "127.0.0.1:5678:5678"
     environment:
       N8N_SECURE_COOKIE: "false"
 
