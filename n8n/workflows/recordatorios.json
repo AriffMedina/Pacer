@@ -107,14 +107,17 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [700, 0],
-      "notes": "El chat_id sale del dato, no de una configuracion fija.",
+      "notes": "El chat_id sale del dato, no de una configuracion fija. Si Telegram falla, este nodo DEBE detener su item: continuar marcaria como entregado un recordatorio que nunca salio, y al quedar confirmado no se reintentaria jamas. Un fallo ruidoso se arregla; uno silencioso se descubre cuando el corredor ya dejo de entrenar.",
       "credentials": {
         "telegramApi": {
           "id": "pacer-bot",
           "name": "Pacer bot"
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
