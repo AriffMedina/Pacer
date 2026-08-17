@@ -32,6 +32,10 @@
   --sobre-lima:#071612;
   --acento:var(--lima);
   --lima-suave:rgba(198,255,62,.10);
+  /* El resplandor del fondo y el color de las partículas del orbe. Sobre papel
+     el lima puro se pierde, así que cada tema tiene el suyo. */
+  --brillo:rgba(28,64,52,.55);
+  --particula:198,255,62;
 
   /* Curvas de animations.dev. Las de serie son demasiado flojas. */
   --salida:cubic-bezier(.23,1,.32,1);
@@ -43,20 +47,25 @@
 }
 /* Claro no es el oscuro invertido: es la misma marca a plena luz, que es
    cuando la gente sale a correr. */
+/* Hueso, no blanco de folio: el blanco puro con un verde saturado encima da
+   pantalla de hoja de cálculo. Este papel tiene algo de cálido y deja que el
+   lima sea lo único que grita. */
 :root[data-tema="claro"]{
-  --fondo:#F4F6F0;
-  --panel:#FFFFFF;
-  --tarjeta:#FFFFFF;
-  --tarjeta-alta:#F7FAF1;
-  --linea:rgba(7,22,18,.10);
-  --linea-fuerte:rgba(7,22,18,.20);
-  --texto:var(--verde-oscuro);
-  --texto-2:#4C5A52;
-  --texto-3:#7D8A82;
+  --fondo:#EFEDE3;
+  --panel:#F7F5EC;
+  --tarjeta:#FBFAF3;
+  --tarjeta-alta:#F2F0E4;
+  --linea:rgba(7,22,18,.11);
+  --linea-fuerte:rgba(7,22,18,.22);
+  --texto:#101A14;
+  --texto-2:#4A574E;
+  --texto-3:#7B857B;
   --sobre-lima:#071612;
-  /* El lima sobre blanco da 1.4:1. Para texto e iconos, oliva de la marca. */
+  /* El lima sobre hueso da 1.4:1. Para texto e iconos, oliva de la marca. */
   --acento:#3E5A0B;
-  --lima-suave:rgba(62,90,11,.09);
+  --lima-suave:rgba(62,90,11,.10);
+  --brillo:rgba(198,255,62,.30);
+  --particula:96,140,26;
 }
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -276,9 +285,8 @@ h2.rotulo{
    ═══════════════════════════════════════════════════════════════ */
 .app{height:100dvh;padding:14px;display:grid;gap:14px;
   grid-template-columns:246px minmax(0,1fr) 340px;
-  background:
-    radial-gradient(120% 55% at 50% -12%,color-mix(in srgb,var(--verde-hondo) 70%,transparent) 0%,transparent 60%),
-    var(--fondo);}
+  background:radial-gradient(120% 55% at 50% -12%,var(--brillo) 0%,transparent 60%),
+             var(--fondo);}
 .app[hidden]{display:none}
 .app.enfocado{grid-template-columns:0 minmax(0,1fr) 0}
 .app.enfocado .rail,.app.enfocado .lateral{opacity:0;pointer-events:none;overflow:hidden}
@@ -342,12 +350,19 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
              0 0 90px 10px rgba(198,255,62,.16),0 0 190px 40px rgba(198,255,62,.10),
              inset 0 0 60px rgba(0,0,0,.9);
   transition:box-shadow .5s var(--salida)}
-/* El orbe NO cambia con el tema: es el objeto de la marca, un eclipse. Aclararlo
-   lo convierte en una pelota pálida y se pierde lo único que lo hace suyo. */
+/* En claro sigue siendo el mismo eclipse, pero de VERDE PROFUNDO, no negro:
+   un círculo negro sobre hueso se lee como un agujero en el papel, no como un
+   objeto con peso. El verde de la marca lo devuelve al mundo de Pacer. */
 :root[data-tema="claro"] .orbe{
-  box-shadow:0 0 0 1px rgba(62,90,11,.30),0 0 26px 2px rgba(198,255,62,.55),
-             0 0 90px 12px rgba(198,255,62,.40),0 0 180px 40px rgba(198,255,62,.22),
-             inset 0 0 60px rgba(0,0,0,.9)}
+  background:radial-gradient(circle at 50% 44%,#1B3229 0%,#122318 58%,#0B1710 100%);
+  box-shadow:0 0 0 1px rgba(62,90,11,.22),0 0 24px 2px rgba(140,200,40,.34),
+             0 0 80px 10px rgba(160,215,60,.26),0 0 170px 38px rgba(180,230,90,.16),
+             inset 0 0 50px rgba(0,0,0,.55)}
+/* El aro también baja de intensidad: sobre papel el lima puro deslumbra. */
+:root[data-tema="claro"] .orbe::before{
+  background:conic-gradient(from 150deg,rgba(90,130,25,.10) 0deg,rgba(122,175,30,.85) 95deg,
+    rgba(150,205,50,.95) 150deg,rgba(122,175,30,.5) 215deg,rgba(90,130,25,.10) 300deg,
+    rgba(90,130,25,.10) 360deg)}
 .orbe::before{content:'';position:absolute;inset:-1px;border-radius:50%;padding:1.4px;
   background:conic-gradient(from 150deg,rgba(198,255,62,.05) 0deg,rgba(198,255,62,.95) 95deg,
     rgba(220,255,140,1) 150deg,rgba(198,255,62,.55) 215deg,rgba(198,255,62,.08) 300deg,
@@ -364,13 +379,25 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 @media (prefers-reduced-motion:reduce){.orbe::before{animation:none}}
 
 .hint{font-size:12.5px;color:var(--texto-3);margin-top:28px;min-height:18px;text-align:center}
-.dialogo{margin-top:9px;text-align:center;max-width:640px;min-height:76px;
-  display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:7px}
-.turno{line-height:1.35;transition:opacity .3s var(--salida),font-size .3s var(--salida)}
-.turno.n0{font-size:clamp(18px,1.7vw,25px);font-weight:300;opacity:1}
-.turno.n1{font-size:15px;opacity:.30}
-.turno.n2{font-size:13.5px;opacity:.13}
+/* El diálogo tiene techo y scroll propio. Sin él, cada turno empujaba la
+   escena hacia abajo hasta pegar el texto contra el botón de hablar. */
+.dialogo{margin-top:12px;text-align:center;max-width:640px;width:100%;
+  max-height:clamp(104px,26svh,210px);overflow-y:auto;scrollbar-width:none;
+  display:flex;flex-direction:column-reverse;justify-content:flex-start;gap:9px;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 20%);
+  mask-image:linear-gradient(180deg,transparent 0,#000 20%)}
+.dialogo::-webkit-scrollbar{display:none}
+.dialogo:empty{margin-top:0}
+.turno{line-height:1.4;text-wrap:pretty;
+  transition:opacity .3s var(--salida),font-size .3s var(--salida)}
+/* Los anteriores se atenúan, no se borran: al 13% no se podían leer. */
+.turno.n0{font-size:clamp(17px,1.6vw,23px);font-weight:300;opacity:1}
+.turno.n1{font-size:14.5px;opacity:.58}
+.turno.n2{font-size:13.5px;opacity:.32}
 .turno.mio{color:var(--texto-2)}
+/* Sobre papel el texto atenuado se pierde antes que sobre negro. */
+:root[data-tema="claro"] .turno.n1{opacity:.72}
+:root[data-tema="claro"] .turno.n2{opacity:.45}
 
 .sugerencias{margin-top:24px;display:flex;flex-direction:column;align-items:center;gap:12px}
 .rotulillo{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;
@@ -695,9 +722,10 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   .pildora span{display:none}
   .pildora{padding:10px;gap:0}
   .hoja{padding-left:20px;padding-right:20px}
-  .escena{padding:0 20px;justify-content:flex-start;overflow-y:auto}
-  .escena > .orbe-caja{margin-top:auto}
-  .escena > .sugerencias{margin-bottom:auto}
+  /* Centrado de verdad, sin márgenes automáticos: los `auto` colgaban de las
+     sugerencias, y al empezar a hablar esas desaparecen y la esfera se caía al
+     fondo dejando medio metro de vacío arriba. */
+  .escena{padding:0 20px 18px;justify-content:center;overflow:hidden}
   /* Todo lo de la pantalla del coach se mide contra la ALTURA disponible, no
      solo contra el ancho: en un teléfono corto la esfera y las sugerencias se
      montaban sobre los controles. Con svh encoge de forma continua en vez de
@@ -706,7 +734,7 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   /* Aire de sobra entre la esfera y las sugerencias: pegadas parecían parte
      de la esfera y no otra cosa que se puede tocar. */
   .hint{margin-top:clamp(16px,4.4svh,38px)}
-  .dialogo{min-height:0}
+  .dialogo{max-height:clamp(96px,22svh,180px)}
   .sugerencias{margin-top:clamp(14px,3.8svh,32px);width:100%;align-items:stretch;
     padding-bottom:6px}
   .rotulillo{text-align:center}
@@ -1086,6 +1114,16 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
+/* El canvas no hereda variables CSS, así que el color de las partículas se lee
+   del token cada vez que cambia el tema. Va arriba y como `function` a
+   propósito: `ponerTema` corre en el arranque, antes de la sección del orbe, y
+   con un `const` más abajo reventaba por zona muerta temporal. */
+var rgbParticula = '198,255,62';
+function leerParticula(){
+  rgbParticula = getComputedStyle(document.documentElement)
+    .getPropertyValue('--particula').trim() || '198,255,62';
+}
+
 /* ═══════════════ Idiomas ═══════════════
    Un diccionario plano y `data-t` en el marcado. Traducir el HTML a mano en
    dos copias es como se desincronizan: una sola fuente por clave. */
@@ -1314,6 +1352,7 @@ function ponerTema(nuevo){
     .setAttribute('content', tema === 'claro' ? '#F4F6F0' : '#0A0D0C');
   $$('[data-tema-btn]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.temaBtn === tema)));
   localStorage.setItem('pacer.tema', tema);
+  leerParticula();
 }
 $$('[data-tema-btn]').forEach((b) => { b.onclick = () => ponerTema(b.dataset.temaBtn); });
 ponerTema(tema);
@@ -1516,7 +1555,7 @@ function animar(){
     const vida = Math.min(1, p.t * 5) * (1 - p.t * .88);
     const alfa = vida * (.30 + energia * .85) * (1 - Math.abs(p.k) * .30);
     if (alfa <= .006) continue;
-    pincel.fillStyle = `rgba(198,255,62,${alfa.toFixed(3)})`;
+    pincel.fillStyle = `rgba(${rgbParticula},${alfa.toFixed(3)})`;
     pincel.beginPath();
     pincel.arc(x, y, p.tam * (.85 + energia * .5), 0, Math.PI * 2);
     pincel.fill();
@@ -1555,7 +1594,10 @@ const dejarDeMedir = () => { cancelAnimationFrame(midiendo); objetivoEnergia = .
 
 let grabadora = null, trozos = [];
 const extension = (x) => x.includes('mp4') ? 'mp4' : x.includes('ogg') ? 'ogg' : 'webm';
-const hintPorDefecto = () => datos?.hay_plan ? t('hint.plan') : t('hint.sin');
+// Con conversación en pantalla, la frase de bienvenida es ruido: solo quedan
+// los estados vivos (te escucho, pensando, hablando).
+const hintPorDefecto = () => turnos.length ? ''
+  : datos?.hay_plan ? t('hint.plan') : t('hint.sin');
 function fallar(visible, detalle){
   decirHint(visible); anotar(detalle);
   setTimeout(() => decirHint(hintPorDefecto()), 5000);
@@ -1641,6 +1683,9 @@ async function reproducir(id){
 function agregarTurno(quien, texto){
   if (!texto) return;
   turnos = [...turnos, {quien, texto}].slice(-3);
+  // La bienvenida deja de tener sentido en cuanto hay conversación; los
+  // estados vivos (te escucho, pensando) los pone quien corresponde.
+  if ([t('hint.plan'), t('hint.sin')].includes($('#hint').textContent)) decirHint('');
   $('#dialogo').innerHTML = [...turnos].reverse()
     .map((x, i) => `<p class="turno n${i} ${x.quien}">${escapar(x.texto)}</p>`).join('');
   $('#sugerencias').style.display = turnos.length ? 'none' : 'flex';
