@@ -56,6 +56,26 @@ def test_ordena_registrar_la_sesion_sin_esperar_los_kilometros() -> None:
     assert "kilómetros son OPCIONALES" in prompt
 
 
+def test_le_prohibe_prometer_cambios_que_no_hizo() -> None:
+    """El fallo más caro: dijo "listo, ajusto el plan" y el plan no cambió."""
+    prompt = construir_prompt()
+
+    assert "REGLA DE NO PROMETER" in prompt
+    assert "todavía no lo puedo hacer" in prompt
+
+
+def test_el_estado_manda_sobre_lo_que_el_modelo_cree_recordar() -> None:
+    """Una promesa falsa se queda en el historial pareciendo un hecho.
+
+    Medido en vivo: al día siguiente afirmó "estás en reposo hasta el viernes"
+    porque él mismo lo había dicho, aunque nunca hubiera ocurrido.
+    """
+    prompt = construir_prompt()
+
+    assert "REGLA DE ESTADO SOBRE MEMORIA" in prompt
+    assert "MANDA EL ESTADO" in prompt
+
+
 def test_deja_claro_que_el_modelo_no_calcula_el_plan() -> None:
     prompt = construir_prompt()
 
