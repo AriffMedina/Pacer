@@ -93,7 +93,7 @@ async def _sembrar_plan_con_sesion_pasada(cliente: TestClient) -> None:
 
     async with cliente.app.state.fabrica() as bd:
         corredores = RepositorioCorredor(bd)
-        corredor = await corredores.obtener_o_crear_piloto()
+        corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
         # Sin canal vinculado el recordatorio no tendría dónde llegar.
         await corredores.vincular_telegram(corredor.id, 555000)
         plan = crear_plan(perfil, hoy=hoy_del_corredor() - timedelta(days=2))

@@ -463,6 +463,26 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   transition:color .2s var(--salida),background-color .2s var(--salida)}
 .selector button svg{width:15px;height:15px}
 .selector button[aria-pressed="true"]{background:var(--lima);color:var(--sobre-lima)}
+/* La cuenta es opcional: se corre sin ella y por eso vive al fondo de ajustes,
+   no en una puerta delante de la app. */
+.ajustes .cuenta{display:block}
+.ajustes .cuenta input{width:100%;height:38px;border-radius:10px;
+  border:1px solid var(--linea-fuerte);background:var(--fondo);padding:0 12px;
+  font-size:13px;outline:none;margin-top:7px;
+  transition:border-color .2s var(--salida)}
+.ajustes .cuenta input:focus{border-color:var(--acento)}
+.ajustes .cuenta .par{display:flex;gap:7px;margin-top:9px}
+.ajustes .cuenta .par button{flex:1;height:36px;border-radius:99px;font-size:12.5px;
+  font-weight:500;border:1px solid var(--linea-fuerte);color:var(--texto-2);
+  transition:color .2s var(--salida),border-color .2s var(--salida)}
+.ajustes .cuenta .par button:hover{color:var(--texto)}
+.ajustes .cuenta .par button.principal{background:var(--lima);color:var(--sobre-lima);
+  border-color:transparent}
+.ajustes .cuenta .quien{font-size:13px;font-weight:500;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ajustes .cuenta .nota{font-size:11.5px;color:var(--texto-3);margin-top:3px;line-height:1.45}
+.ajustes .cuenta .aviso-cuenta{font-size:11.5px;color:#FF8A8A;margin-top:7px;display:none}
+.ajustes .cuenta .aviso-cuenta.on{display:block}
 
 /* Tarjetas del lateral */
 .tarjeta{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);padding:16px}
@@ -1100,6 +1120,7 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
             </button>
           </div>
         </div>
+        <div class="grupo cuenta" id="grupo-cuenta"></div>
       </div>
     </div>
 
@@ -1172,6 +1193,15 @@ const T = {
     'app.enfoque':'Modo enfoque','app.sugerencias':'Sugerencias','app.hablar':'MANTÉN PARA HABLAR',
     'app.escribe':'Escríbele al coach…','ajustes.idioma':'Idioma','ajustes.tema':'Tema',
     'nav.coach':'Coach','nav.plan':'Plan','nav.agenda':'Agenda','nav.progreso':'Progreso',
+    'cuenta.titulo':'Guarda tu progreso','cuenta.tuya':'Tu cuenta',
+    'cuenta.porque':'Opcional. Sin cuenta, tu plan vive en este navegador y se pierde si borras los datos.',
+    'cuenta.guardado':'Tu plan te sigue a cualquier dispositivo.',
+    'cuenta.correo':'Tu correo','cuenta.clave':'Contraseña','cuenta.entrar':'Entrar',
+    'cuenta.crear':'Crear cuenta','cuenta.salir':'Cerrar sesión',
+    'cuenta.err.datos':'Ese correo y esa contraseña no coinciden.',
+    'cuenta.err.ocupado':'Ese correo ya tiene cuenta.',
+    'cuenta.err.ya':'Este navegador ya está en una cuenta.',
+    'cuenta.err.correo':'Escribe un correo válido.',
     'saludo.manana':'Buenos días','saludo.tarde':'Buenas tardes','saludo.noche':'Buenas noches',
     'bajada.plan':'Tu coach está aquí para ayudarte a mantener el ritmo.',
     'bajada.sin':'Tu coach está aquí. Cuéntale qué quieres correr.',
@@ -1267,6 +1297,15 @@ const T = {
     'app.enfoque':'Focus mode','app.sugerencias':'Suggestions','app.hablar':'HOLD TO TALK',
     'app.escribe':'Write to your coach…','ajustes.idioma':'Language','ajustes.tema':'Theme',
     'nav.coach':'Coach','nav.plan':'Plan','nav.agenda':'Calendar','nav.progreso':'Progress',
+    'cuenta.titulo':'Save your progress','cuenta.tuya':'Your account',
+    'cuenta.porque':'Optional. Without an account your plan lives in this browser and is lost if you clear its data.',
+    'cuenta.guardado':'Your plan follows you to any device.',
+    'cuenta.correo':'Your email','cuenta.clave':'Password','cuenta.entrar':'Sign in',
+    'cuenta.crear':'Create account','cuenta.salir':'Sign out',
+    'cuenta.err.datos':'That email and password do not match.',
+    'cuenta.err.ocupado':'That email already has an account.',
+    'cuenta.err.ya':'This browser is already in an account.',
+    'cuenta.err.correo':'Enter a valid email.',
     'saludo.manana':'Good morning','saludo.tarde':'Good afternoon','saludo.noche':'Good evening',
     'bajada.plan':'Your coach is here to help you keep the rhythm.',
     'bajada.sin':'Your coach is here. Tell it what you want to run.',
@@ -1331,6 +1370,7 @@ function aplicarIdioma(){
   $$('[data-idioma]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.idioma === idioma)));
   localStorage.setItem('pacer.idioma', idioma);
   pintarDemo();
+  pintarCuenta();
   if (datos) { construirNav(); pintar(); }
 }
 function ponerIdioma(nuevo){
@@ -1402,6 +1442,7 @@ function entrarApp(){
   $('#app').hidden = false;
   location.hash = 'app';
   medirCanvas();
+  cargarCuenta();
   if (!datos) cargar();
 }
 function volverLanding(){
@@ -1471,7 +1512,10 @@ function irA(destino){
     if (v === 'coach') n.style.display = destino === 'coach' ? 'flex' : 'none';
     else n.hidden = destino !== v;
   });
-  $('#controles').style.display = destino === 'coach' ? 'flex' : 'none';
+  // La barra se queda en TODAS las vistas. Escondiéndola fuera de Coach, el
+  // engrane —y con él la cuenta— quedaba inalcanzable desde Plan o Agenda. Y
+  // poder decir "muévelo al lunes" mirando el plan es mejor producto que tener
+  // que volver a la pantalla del coach para hablar.
   pintar();
 }
 
@@ -2087,6 +2131,79 @@ function pintarProgreso(){
         <i style="height:${Math.max(3, s.km_total / tope * 100)}%"></i><b>${s.numero}</b></div>`).join('')}</div>
     <p class="vacio">${t('pr.rayada')}</p>`;
 }
+/* ═══════════════ Cuenta ═══════════════
+   Opcional a propósito: se prueba y se corre sin registrarse, y la cuenta
+   existe para no perder el plan al cambiar de teléfono. Registrarse ADOPTA el
+   corredor anónimo, así que no se pierde nada al crearla. */
+let cuenta = null;
+
+async function cargarCuenta(){
+  try{ cuenta = await (await fetch('/api/cuenta')).json(); }
+  catch{ cuenta = null; }
+  pintarCuenta();
+}
+
+function pintarCuenta(){
+  const caja = $('#grupo-cuenta');
+  if (!caja) return;
+
+  caja.innerHTML = cuenta?.email ? `
+    <span class="etiq">${t('cuenta.tuya')}</span>
+    <div class="quien">${escapar(cuenta.email)}</div>
+    <p class="nota">${t('cuenta.guardado')}</p>
+    <div class="par"><button id="c-salir">${t('cuenta.salir')}</button></div>`
+  : `
+    <span class="etiq">${t('cuenta.titulo')}</span>
+    <p class="nota">${t('cuenta.porque')}</p>
+    <input id="cta-email" type="email" autocomplete="email" placeholder="${t('cuenta.correo')}">
+    <input id="cta-clave" type="password" autocomplete="current-password" placeholder="${t('cuenta.clave')}">
+    <p class="aviso-cuenta" id="cta-aviso"></p>
+    <div class="par">
+      <button id="c-entrar">${t('cuenta.entrar')}</button>
+      <button class="principal" id="c-crear">${t('cuenta.crear')}</button>
+    </div>`;
+
+  if (cuenta?.email){ $('#c-salir').onclick = salirDeLaCuenta; return; }
+  $('#c-entrar').onclick = () => mandarCuenta('/api/cuenta/entrar');
+  $('#c-crear').onclick = () => mandarCuenta('/api/cuenta/registro');
+}
+
+const FALLOS_CUENTA = {
+  no_coincide:'cuenta.err.datos', correo_ocupado:'cuenta.err.ocupado',
+  ya_tiene_cuenta:'cuenta.err.ya', correo_invalido:'cuenta.err.correo',
+};
+
+async function mandarCuenta(url){
+  const aviso = $('#cta-aviso');
+  aviso.classList.remove('on');
+  try{
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:$('#cta-email').value.trim(), password:$('#cta-clave').value})});
+    const d = await r.json();
+    if (!r.ok){
+      // `explicacion` viene del dominio (por qué la clave es débil); el resto
+      // se traduce por código para no soltar jerga de servidor en la cara.
+      aviso.textContent = d.explicacion || t(FALLOS_CUENTA[d.error] || 'cuenta.err.datos');
+      aviso.classList.add('on');
+      return;
+    }
+    // Entrar cambia de corredor: hay que releerlo TODO, no solo la cuenta.
+    turnos = []; $('#dialogo').innerHTML = ''; semanaVista = null; mesVisible = null;
+    await cargarCuenta();
+    await cargar();
+    anotar('cuenta: ' + d.email);
+  }catch(err){ anotar('no se pudo con la cuenta: ' + err.message); }
+}
+
+async function salirDeLaCuenta(){
+  try{
+    await fetch('/api/cuenta/salir', {method:'POST'});
+    // Recargar y no repintar: el navegador estrena corredor anónimo y dejar
+    // media pantalla con los datos del anterior sería enseñar lo que no toca.
+    location.reload();
+  }catch(err){ anotar('no se pudo salir: ' + err.message); }
+}
+
 /* En móvil las estadísticas van DEBAJO DEL SALUDO, no al final de la pantalla:
    son lo primero que se mira al abrir la app. En escritorio vuelven a su
    columna. Se mueve el nodo en vez de duplicarlo para que no haya dos verdades. */

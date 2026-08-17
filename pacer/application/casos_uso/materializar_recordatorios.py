@@ -17,12 +17,23 @@ from pacer.infrastructure.persistencia.repositorio_recordatorio import (
 
 
 async def materializar_recordatorios(bd: AsyncSession, ahora: datetime) -> int:
-    """Devuelve cuántos recordatorios nuevos se crearon."""
-    corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
-    plan = await RepositorioPlan(bd).version_activa(corredor.id)
+    """Devuelve cuántos recordatorios nuevos se crearon.
 
-    if plan is None:
-        return 0
+    Recorre a TODOS los corredores con Telegram vinculado, no al primero de la
+    tabla: desde que cada navegador y cada chat son su propia persona, mirar
+    solo a uno dejaría al resto sin recordatorios en silencio.
 
-    pendientes = recordatorios_pendientes(plan, corredor.id, ahora)
-    return await RepositorioRecordatorio(bd).materializar(pendientes)
+    Solo los que tienen chat: un recordatorio sin canal por donde salir no es
+    un recordatorio, es una fila.
+    """
+    planes = RepositorioPlan(bd)
+    nuevos = 0
+
+    for corredor in await RepositorioCorredor(bd).con_telegram():
+        plan = await planes.version_activa(corredor.id)
+        if plan is None:
+            continue
+        pendientes = recordatorios_pendientes(plan, corredor.id, ahora)
+        nuevos += await RepositorioRecordatorio(bd).materializar(pendientes)
+
+    return nuevos

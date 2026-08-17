@@ -41,6 +41,13 @@ class CorredorORM(Base):
     email: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
     password_hash: Mapped[str | None] = mapped_column(default=None)
 
+    # Qué navegador es este corredor ahora mismo. Sin cuenta es la única
+    # identidad que hay; con cuenta, entrar mueve esta llave a la fila de la
+    # cuenta y el navegador pasa a ser esa persona.
+    clave_sesion: Mapped[str | None] = mapped_column(
+        unique=True, index=True, default=None
+    )
+
     # Perfil. Son hechos del corredor, no conversación, así que son columnas.
     nombre: Mapped[str | None] = mapped_column(default=None)
     objetivo: Mapped[str | None] = mapped_column(default=None)

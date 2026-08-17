@@ -68,7 +68,7 @@ async def test_guardar_el_perfil_no_duplica_corredores(
 async def test_dos_corredores_quedan_aislados(
     corredores: RepositorioCorredor,
 ) -> None:
-    """El multiusuario está en el modelo; lo que falta es autenticación."""
+    """Cada corredor con sus datos: es la garantía que sostiene todo lo demás."""
     ana = await corredores.obtener_o_crear(telegram_chat_id=7123456789)
     beto = await corredores.obtener_o_crear(telegram_chat_id=8987654321)
 
@@ -80,23 +80,23 @@ async def test_dos_corredores_quedan_aislados(
     assert recuperado_beto.perfil.objetivo is None
 
 
-async def test_el_piloto_es_siempre_el_mismo(
+async def test_el_mismo_navegador_devuelve_el_mismo_corredor(
     corredores: RepositorioCorredor,
 ) -> None:
-    """Web y Telegram atienden a la misma persona en el piloto."""
-    primero = await corredores.obtener_o_crear_piloto()
-    segundo = await corredores.obtener_o_crear_piloto()
+    """La cookie es la identidad mientras no haya cuenta."""
+    primero = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
+    segundo = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
 
     assert primero.id == segundo.id
 
 
-async def test_telegram_se_ata_al_piloto_la_primera_vez(
+async def test_telegram_se_ata_al_corredor_la_primera_vez(
     corredores: RepositorioCorredor,
 ) -> None:
-    piloto = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
 
-    await corredores.vincular_telegram(piloto.id, CHAT)
-    recuperado = await corredores.por_id(piloto.id)
+    await corredores.vincular_telegram(corredor.id, CHAT)
+    recuperado = await corredores.por_id(corredor.id)
 
     assert recuperado is not None
     assert recuperado.telegram_chat_id == CHAT
@@ -106,13 +106,13 @@ async def test_la_conversacion_sobrevive_al_reinicio(
     corredores: RepositorioCorredor,
 ) -> None:
     """El bonus del correo: memoria de conversaciones anteriores."""
-    piloto = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
 
-    await corredores.recordar(piloto.id, "user", "quiero un medio maratón")
-    await corredores.recordar(piloto.id, "assistant", "¿Cuándo es la carrera?")
-    await corredores.recordar(piloto.id, "user", "el 1 de noviembre")
+    await corredores.recordar(corredor.id, "user", "quiero un medio maratón")
+    await corredores.recordar(corredor.id, "assistant", "¿Cuándo es la carrera?")
+    await corredores.recordar(corredor.id, "user", "el 1 de noviembre")
 
-    turnos = await corredores.ultimos_turnos(piloto.id, cuantos=10)
+    turnos = await corredores.ultimos_turnos(corredor.id, cuantos=10)
 
     assert [t["role"] for t in turnos] == ["user", "assistant", "user"]
     assert turnos[0]["content"][0]["text"] == "quiero un medio maratón"
@@ -122,12 +122,12 @@ async def test_solo_se_cargan_los_ultimos_turnos(
     corredores: RepositorioCorredor,
 ) -> None:
     # El historial completo no cabe ni conviene: el estado lo dan las tablas.
-    piloto = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     for i in range(10):
-        await corredores.recordar(piloto.id, "user", f"pregunta {i}")
-        await corredores.recordar(piloto.id, "assistant", f"respuesta {i}")
+        await corredores.recordar(corredor.id, "user", f"pregunta {i}")
+        await corredores.recordar(corredor.id, "assistant", f"respuesta {i}")
 
-    turnos = await corredores.ultimos_turnos(piloto.id, cuantos=4)
+    turnos = await corredores.ultimos_turnos(corredor.id, cuantos=4)
 
     assert len(turnos) == 4
     assert turnos[0]["role"] == "user"
@@ -148,11 +148,7 @@ async def test_la_conversacion_de_otro_corredor_no_se_mezcla(
 async def test_el_corredor_nace_sin_credenciales(
     corredores: RepositorioCorredor,
 ) -> None:
-    """`email` y `password_hash` existen desde hoy, vacíos.
-
-    Así, agregar login más adelante no requiere migrar el esquema: solo
-    llenarlos.
-    """
+    """Se corre sin cuenta. Las credenciales se llenan solo si te registras."""
     corredor = await corredores.obtener_o_crear(telegram_chat_id=CHAT)
 
     assert corredor.email is None
