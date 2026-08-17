@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from pacer.infrastructure.persistencia.esquema import agregar_columnas_nuevas
 from pacer.infrastructure.persistencia.modelos import Base
@@ -49,6 +50,36 @@ def test_no_se_pierden_los_datos_que_ya_estaban(motor) -> None:  # type: ignore[
         ).one()
         assert fila.objetivo == "21k"
         assert fila.nombre is None
+
+
+def test_crea_tambien_los_indices_que_faltan(motor) -> None:  # type: ignore[no-untyped-def]
+    """Una columna sin su índice único es una columna a medias.
+
+    Pasó en producción: `clave_sesion` se agregó con ALTER pero su UNIQUE no,
+    así que dos peticiones a la vez creaban DOS corredores con la misma cookie
+    y la siguiente consulta reventaba por encontrar dos filas donde va una.
+    """
+    with motor.begin() as conexion:
+        conexion.execute(
+            text("CREATE TABLE corredor (id INTEGER PRIMARY KEY, objetivo VARCHAR)")
+        )
+
+        agregar_columnas_nuevas(conexion)
+
+        indices = {i["name"] for i in inspect(conexion).get_indexes("corredor")}
+        assert "ix_corredor_clave_sesion" in indices
+
+
+def test_el_indice_nuevo_impide_duplicados(motor) -> None:  # type: ignore[no-untyped-def]
+    with motor.begin() as conexion:
+        conexion.execute(text("CREATE TABLE corredor (id INTEGER PRIMARY KEY)"))
+        agregar_columnas_nuevas(conexion)
+
+        conexion.execute(text("INSERT INTO corredor (id, clave_sesion) VALUES (1,'k')"))
+        with pytest.raises(IntegrityError):
+            conexion.execute(
+                text("INSERT INTO corredor (id, clave_sesion) VALUES (2,'k')")
+            )
 
 
 def test_correrlo_dos_veces_no_falla(motor) -> None:  # type: ignore[no-untyped-def]
