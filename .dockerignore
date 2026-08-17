@@ -1,0 +1,27 @@
+# Secretos: la imagen jamás debe llevarlos dentro. Entran por env_file al correr.
+.env
+
+# Entorno local y cachés
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+
+# Planeación local, no se distribuye
+.context/
+.atl/
+
+# Herramientas y metadatos
+.git/
+.github/
+.idea/
+*.iml
+tests/
+infra/
+docs/
+evals/
+*.db
+*.db-journal

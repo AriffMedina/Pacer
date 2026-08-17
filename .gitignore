@@ -16,3 +16,15 @@ __pycache__/
 # Base local de desarrollo (SQLite). En despliegue se usa Postgres.
 *.db
 *.db-journal
+
+# Herramientas de agentes instaladas para trabajar en el diseño (skills de
+# Emil Kowalski, impeccable, taste). Son ~17 MB de dependencias del entorno de
+# desarrollo, no del producto: quien clone Pacer no las necesita para correrlo.
+.agents/
+.claude/
+.codex/
+.github/agents/
+.github/hooks/
+.github/skills/
+.impeccable/
+skills-lock.json

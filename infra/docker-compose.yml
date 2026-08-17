@@ -1,3 +1,11 @@
+# `docker compose up` levanta el sistema completo: base de datos y aplicación.
+# Ese es el primero de los cuatro criterios de entrega.
+#
+# Langfuse queda bajo un perfil y NO arranca por defecto: el proyecto usa
+# Langfuse Cloud. Un servicio extra sin verificar en el camino por defecto solo
+# puede romper el arranque, y arrancar a la primera vale más que traer de todo.
+#   docker compose --profile observabilidad-local up
+
 services:
   postgres:
     image: postgres:16
@@ -9,16 +17,65 @@ services:
     ports:
       # 5433 en el host a propósito: en una máquina con PostgreSQL instalado
       # nativamente el 5432 ya está ocupado y el contenedor no levanta.
-      # Dentro de la red del compose Langfuse sigue hablando por el 5432.
+      # Dentro de la red del compose se sigue hablando por el 5432.
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pacer -d pacer"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Las credenciales vienen del .env de la raíz, nunca del compose.
+    env_file:
+      - ../.env
+    environment:
+      # Dentro de la red del compose se habla con el servicio, no con localhost.
+      DATABASE_URL: postgresql+asyncpg://pacer:pacer@postgres:5432/pacer
+    ports:
+      - "8000:8000"
+    volumes:
+      # Credenciales de AWS de solo lectura, NO copiadas al .env ni a la imagen.
+      # En EC2 esto no va: el rol de instancia las provee y el archivo no existe.
+      # Es el mismo argumento del ADR-008 — sin llaves de API en ningún lado.
+      - ${USERPROFILE:-${HOME}}/.aws:/home/pacer/.aws:ro
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "5678:5678"
+    environment:
+      GENERIC_TIMEZONE: America/Merida
+      TZ: America/Merida
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      # Dentro de la red del compose el backend es `app`, no localhost. El
+      # token va en las credenciales de n8n, nunca en el JSON del workflow.
+      PACER_API: http://app:8000
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # Los workflows viven en el repo, no solo dentro de la instancia:
+      #   n8n export:workflow --separate --output=/workflows
+      - ../n8n/workflows:/workflows
 
   langfuse:
     image: langfuse/langfuse:2
+    profiles: ["observabilidad-local"]
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
@@ -29,3 +86,4 @@ services:
 
 volumes:
   postgres_data:
+  n8n_data:

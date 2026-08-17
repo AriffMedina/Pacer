@@ -21,6 +21,14 @@ def test_ordena_guardar_antes_de_preguntar() -> None:
     assert "Guardar primero, preguntar después" in prompt
 
 
+def test_le_prohibe_afirmar_lo_que_no_hizo() -> None:
+    """Medido en vivo: recibió un error de herramienta y dijo "ya lo registré"."""
+    prompt = construir_prompt()
+
+    assert "REGLA DE HONESTIDAD" in prompt
+    assert "NO PASÓ NADA" in prompt
+
+
 def test_le_prohibe_echarle_la_culpa_al_sistema() -> None:
     prompt = construir_prompt()
 
@@ -46,6 +54,49 @@ def test_ordena_registrar_la_sesion_sin_esperar_los_kilometros() -> None:
 
     assert "REGLA DE SESIÓN" in prompt
     assert "kilómetros son OPCIONALES" in prompt
+
+
+def test_por_defecto_habla_espanol() -> None:
+    assert "LANGUAGE" not in construir_prompt()
+
+
+def test_en_ingles_la_orden_va_al_final() -> None:
+    """Lo último que se lee pesa más, y el resto del prompt está en español."""
+    prompt = construir_prompt("HOY: domingo", idioma="en")
+
+    assert prompt.rstrip().endswith("not in the plan.")
+    assert "reply ONLY in English" in prompt
+    # Las reglas siguen ahí: se traduce la respuesta, no el manual.
+    assert "REGLA DE HONESTIDAD" in prompt
+
+
+def test_en_ingles_se_le_prohibe_convertir_a_millas() -> None:
+    """Convertir kilómetros diría un número que no está en el plan."""
+    assert "not in the plan" in construir_prompt(idioma="en")
+
+
+def test_un_idioma_que_no_existe_no_rompe_nada() -> None:
+    assert construir_prompt(idioma="klingon") == construir_prompt()
+
+
+def test_le_prohibe_prometer_cambios_que_no_hizo() -> None:
+    """El fallo más caro: dijo "listo, ajusto el plan" y el plan no cambió."""
+    prompt = construir_prompt()
+
+    assert "REGLA DE NO PROMETER" in prompt
+    assert "todavía no lo puedo hacer" in prompt
+
+
+def test_el_estado_manda_sobre_lo_que_el_modelo_cree_recordar() -> None:
+    """Una promesa falsa se queda en el historial pareciendo un hecho.
+
+    Medido en vivo: al día siguiente afirmó "estás en reposo hasta el viernes"
+    porque él mismo lo había dicho, aunque nunca hubiera ocurrido.
+    """
+    prompt = construir_prompt()
+
+    assert "REGLA DE ESTADO SOBRE MEMORIA" in prompt
+    assert "MANDA EL ESTADO" in prompt
 
 
 def test_deja_claro_que_el_modelo_no_calcula_el_plan() -> None:

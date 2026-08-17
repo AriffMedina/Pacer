@@ -8,6 +8,7 @@ from datetime import date
 from typing import Any
 
 from pacer.application.casos_uso.conversar import ResultadoTurno, procesar_turno
+from pacer.domain.entidades.carrera import Carrera
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import PuertoLLM
 from pacer.domain.puertos.repositorio import PuertoRepositorioPlan
@@ -21,23 +22,31 @@ async def atender_turno(
     perfil: Perfil,
     corredor_id: int,
     hoy: date,
+    carreras: tuple[Carrera, ...] = (),
 ) -> ResultadoTurno:
     """Carga el plan activo, procesa el turno y guarda si el plan cambió."""
     previo = await repositorio.version_activa(corredor_id)
 
-    resultado = procesar_turno(llm, sistema, mensajes, perfil, hoy=hoy, plan=previo)
+    resultado = procesar_turno(
+        llm, sistema, mensajes, perfil, hoy=hoy, plan=previo, carreras=carreras
+    )
 
-    if _hay_version_nueva(previo, resultado):
+    if _hay_algo_que_guardar(previo, resultado):
         assert resultado.plan is not None
         await repositorio.guardar(resultado.plan, corredor_id=corredor_id)
 
     return resultado
 
 
-def _hay_version_nueva(previo: Any, resultado: ResultadoTurno) -> bool:
-    """Se guarda solo cuando nace una versión: registrar un hecho no crea filas."""
+def _hay_algo_que_guardar(previo: Any, resultado: ResultadoTurno) -> bool:
+    """¿Cambió algo del plan en este turno?
+
+    No basta con mirar la versión. Reportar una sesión como `normal` marca
+    `completada` sin crear una v2, y eso es un hecho que debe persistir. Antes
+    se comparaba solo la versión y esos registros se perdían en silencio.
+    """
     if resultado.plan is None:
         return False
     if previo is None:
         return True
-    return bool(resultado.plan.version > previo.version)
+    return resultado.plan != previo

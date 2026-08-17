@@ -15,6 +15,11 @@ from pydantic import BaseModel, Field
 class ActualizarPerfil(BaseModel):
     """Úsala en cuanto el corredor mencione cualquiera de estos datos."""
 
+    nombre: str | None = Field(
+        None,
+        max_length=40,
+        description="Cómo se llama o cómo quiere que le digan. Solo el nombre.",
+    )
     objetivo: Literal["5k", "10k", "21k", "maraton"] | None = None
     nivel: Literal["nuevo", "principiante", "intermedio", "avanzado"] | None = None
     dias_disponibles: int | None = Field(None, ge=2, le=6)
@@ -43,14 +48,105 @@ class RegistrarSesion(BaseModel):
     ) = None
 
 
+class MoverSesion(BaseModel):
+    """Úsala cuando el corredor no pueda entrenar un día y quiera cambiarlo.
+
+    Es la respuesta a "el martes no puedo" o "¿lo paso al lunes?". NO decidas
+    tú si se puede: llámala y la regla contesta. Si no se puede, te devuelve el
+    motivo y los días libres para que propongas otro.
+    """
+
+    pista_temporal: str = Field(
+        description="El día que se quiere cambiar, como lo dijo: mañana, el martes, 2026-08-18"
+    )
+    nuevo_dia: str = Field(
+        description="El día al que se mueve, como lo dijo: el lunes, mañana, 2026-08-17"
+    )
+
+
+class PausarEntrenamiento(BaseModel):
+    """Úsala cuando el corredor tenga que PARAR varios días.
+
+    Una lesión, una gripe, un viaje, reposo mandado por un médico. Quita las
+    sesiones de esos días y suaviza la vuelta. NO narres el descanso sin
+    llamarla: sin esta llamada el plan no cambia y le habrás mentido.
+    """
+
+    desde: str = Field(description="Primer día de descanso, en ISO AAAA-MM-DD.")
+    hasta: str = Field(description="Último día de descanso, en ISO AAAA-MM-DD.")
+
+
 class GenerarPlan(BaseModel):
     """Úsala solo cuando el perfil esté completo. Si falta algo, pregunta."""
+
+
+class ApuntarCarrera(BaseModel):
+    """Úsala cuando el corredor mencione una carrera con fecha que va a correr.
+
+    Sirve para cualquier carrera de su calendario, no solo la que entrena. Si
+    además quiere entrenar PARA ella, llama también a actualizar_perfil.
+    """
+
+    nombre: str = Field(
+        max_length=80, description="Cómo la llama el corredor. Por ejemplo: Maratón CDMX"
+    )
+    fecha: str = Field(
+        description=(
+            "Fecha en formato ISO AAAA-MM-DD. Si no dijo el año, pregúntaselo "
+            "antes de llamar esta herramienta."
+        )
+    )
+    distancia_km: float | None = Field(
+        None,
+        gt=0,
+        le=200,
+        description=(
+            "Distancia en KILÓMETROS, como número. Un 10K es 10, un medio "
+            "maratón 21.1, un maratón 42.2. Vale cualquier distancia."
+        ),
+    )
+    nota: str | None = Field(
+        None, max_length=200, description="Lo que el corredor quiera recordar de ella."
+    )
+
+
+class MoverCarrera(BaseModel):
+    """Úsala para CAMBIAR LA FECHA de una carrera que ya está apuntada.
+
+    Si el corredor pospone una carrera, MUÉVELA. No apuntes una nueva: se
+    quedarían las dos y su agenda dejaría de ser cierta.
+    """
+
+    carrera_id: int = Field(description="El número que aparece como #N en la lista.")
+    nueva_fecha: str = Field(description="Fecha en formato ISO AAAA-MM-DD.")
+
+
+class QuitarCarrera(BaseModel):
+    """Úsala cuando el corredor ya no vaya a correr una carrera apuntada."""
+
+    carrera_id: int = Field(description="El número que aparece como #N en la lista.")
+
+
+class ElegirCarreraObjetivo(BaseModel):
+    """Úsala cuando el corredor decida para qué carrera quiere entrenar.
+
+    Guarda la meta y la fecha de una sola vez, tomándolas de la carrera. No
+    hace falta que copies la distancia ni la fecha a mano.
+    """
+
+    carrera_id: int = Field(description="El número que aparece como #N en la lista.")
 
 
 HERRAMIENTAS: dict[str, type[BaseModel]] = {
     "actualizar_perfil": ActualizarPerfil,
     "registrar_sesion": RegistrarSesion,
+    "mover_sesion": MoverSesion,
+    "pausar_entrenamiento": PausarEntrenamiento,
     "generar_plan": GenerarPlan,
+    "apuntar_carrera": ApuntarCarrera,
+    "mover_carrera": MoverCarrera,
+    "quitar_carrera": QuitarCarrera,
+    "elegir_carrera_objetivo": ElegirCarreraObjetivo,
 }
 
 

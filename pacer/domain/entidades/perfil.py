@@ -10,6 +10,10 @@ Nivel = Literal["nuevo", "principiante", "intermedio", "avanzado"]
 
 @dataclass(frozen=True)
 class Perfil:
+    nombre: str | None = None
+    """Cómo quiere que le digan. No entra en ningún cálculo: existe para que el
+    coach y la interfaz hablen con una persona y no con un corredor genérico."""
+
     objetivo: Objetivo | None = None
     nivel: Nivel | None = None
     dias_disponibles: int | None = None

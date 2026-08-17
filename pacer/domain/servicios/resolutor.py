@@ -61,6 +61,13 @@ def _interpretar_fecha(pista: str, hoy: date) -> date | None:
     """Traduce una pista en español a una fecha concreta, o None si no se entiende."""
     texto = pista.strip().lower()
 
+    # El modelo a veces manda la fecha ya resuelta en ISO en vez de la pista
+    # hablada. Rechazarla obligaría a una vuelta más de conversación por nada.
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        pass
+
     # De más larga a más corta: "ayer" es substring de "anteayer" y ganaría
     # la coincidencia equivocada.
     for palabra in sorted(DESPLAZAMIENTOS, key=len, reverse=True):
@@ -76,6 +83,14 @@ def _interpretar_fecha(pista: str, hoy: date) -> date | None:
 
 
 def _cercanas(sesiones: tuple[Sesion, ...], hoy: date) -> tuple[Sesion, ...]:
-    """Sesiones dentro de la ventana reciente, como opciones para preguntar."""
+    """Sesiones sobre las que tiene sentido preguntar "¿cómo te fue?".
+
+    Solo las que YA PASARON y siguen sin reportar. La de hoy no entra: todavía
+    no ocurrió, e incluirla convertía en ambiguo un caso que no lo era —"el
+    fácil de 5.6 km" con una sesión pasada y una de hoy devolvía dos candidatas
+    y el registro se caía.
+    """
     desde = hoy - timedelta(days=DIAS_DE_VENTANA)
-    return tuple(s for s in sesiones if desde <= s.fecha <= hoy)
+    return tuple(
+        s for s in sesiones if desde <= s.fecha < hoy and not s.completada
+    )

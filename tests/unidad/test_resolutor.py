@@ -14,6 +14,16 @@ def sesion(dia: int, tipo: str = "facil", km: float = 6.0) -> Sesion:
     return Sesion(fecha=date(2026, 8, dia), tipo=tipo, km=km)  # type: ignore[arg-type]
 
 
+def test_acepta_la_fecha_ya_resuelta_en_iso() -> None:
+    """El modelo a veces manda la fecha en vez de la pista hablada."""
+    plan = plan_con(sesion(19), sesion(20))
+
+    resultado = resolver_sesion(plan, "2026-08-19", hoy=HOY)
+
+    assert resultado.sesion is not None
+    assert resultado.sesion.fecha == date(2026, 8, 19)
+
+
 def test_ayer_resuelve_la_sesion_del_dia_anterior() -> None:
     plan = plan_con(sesion(19), sesion(20))
 
@@ -61,12 +71,50 @@ def test_dos_sesiones_el_mismo_dia_devuelven_opciones() -> None:
 
 
 def test_una_pista_que_no_se_entiende_no_revienta() -> None:
-    plan = plan_con(sesion(19), sesion(20))
+    plan = plan_con(sesion(18), sesion(19))
 
     resultado = resolver_sesion(plan, "el otro día", hoy=HOY)
 
     assert resultado.sesion is None
     assert resultado.candidatas
+
+
+def test_la_sesion_de_hoy_no_es_candidata() -> None:
+    """Todavía no ocurrió: preguntar "¿cómo te fue?" por ella no tiene sentido.
+
+    Incluirla convertía en ambiguo un caso que no lo era.
+    """
+    plan = plan_con(sesion(19), sesion(20))  # 20 es HOY
+
+    resultado = resolver_sesion(plan, "el fácil de 6 km", hoy=HOY)
+
+    assert [s.fecha for s in resultado.candidatas] == [date(2026, 8, 19)]
+
+
+def test_con_una_sola_pendiente_reciente_no_hay_ambiguedad_real() -> None:
+    plan = plan_con(sesion(19), sesion(20))
+
+    resultado = resolver_sesion(plan, "lo de la otra vez", hoy=HOY)
+
+    assert len(resultado.candidatas) == 1
+    assert not resultado.es_ambigua
+
+
+def test_una_sesion_ya_reportada_no_vuelve_a_ofrecerse() -> None:
+    plan = plan_con(
+        Sesion(
+            fecha=date(2026, 8, 18),
+            tipo="facil",
+            km=6.0,
+            completada=True,
+            sensacion="normal",
+        ),
+        sesion(19),
+    )
+
+    resultado = resolver_sesion(plan, "no sé cuándo", hoy=HOY)
+
+    assert [s.fecha for s in resultado.candidatas] == [date(2026, 8, 19)]
 
 
 def test_sin_sesiones_cercanas_no_hay_candidatas() -> None:

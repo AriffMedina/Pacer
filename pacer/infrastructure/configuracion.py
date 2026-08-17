@@ -38,6 +38,10 @@ class Configuracion(BaseSettings):
     # pague el arranque en frío. Se apaga en tests: no deben tocar la red.
     calentar_voz: bool = True
 
+    # Token de la API interna que consume n8n. Vacío = API interna cerrada.
+    # El default inseguro es el que se olvida en producción.
+    pacer_token: str = ""
+
     groq_api_key: str = ""
     telegram_bot_token: str = ""
     langfuse_public_key: str = ""

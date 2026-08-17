@@ -11,7 +11,6 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.puertos.llm import RespuestaLLM
 from pacer.domain.puertos.voz import Transcripcion
 
@@ -76,8 +75,6 @@ def cliente(_app_levantada: TestClient) -> TestClient:
     """Estado limpio y adaptadores falsos para cada test."""
     from pacer.interfaces.http import app as modulo
 
-    modulo.sesion.perfil = Perfil()
-    modulo.sesion.mensajes = []
     modulo._PENDIENTES.clear()
     modulo._YA_SINTETIZADO.clear()
 
