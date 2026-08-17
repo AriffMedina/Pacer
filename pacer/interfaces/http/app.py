@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, Header, UploadFile
+from fastapi import BackgroundTasks, FastAPI, Header, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -47,6 +47,12 @@ from pacer.infrastructure.persistencia.repositorio import RepositorioPlan
 from pacer.infrastructure.persistencia.repositorio_carrera import RepositorioCarrera
 from pacer.infrastructure.persistencia.repositorio_corredor import RepositorioCorredor
 from pacer.infrastructure.reloj import hoy as hoy_del_corredor
+from pacer.infrastructure.seguridad import (
+    ClaveInvalida,
+    cifrar,
+    coincide,
+    llave_de_sesion,
+)
 from pacer.interfaces.http.internas import router as router_interno
 from pacer.interfaces.worker.sondeo_telegram import sondear
 
@@ -73,7 +79,9 @@ _YA_SINTETIZADO: OrderedDict[str, bytes] = OrderedDict()
 MAX_PENDIENTES = 20
 
 
-async def _atender(dicho: str, canal: str, idioma: str = "es") -> tuple[Any, str]:
+async def _atender(
+    dicho: str, canal: str, clave: str, idioma: str = "es"
+) -> tuple[Any, str]:
     """Un turno completo, venga de voz o de texto.
 
     La traza envuelve todo: las llamadas al modelo cuelgan de ella, así en
@@ -86,7 +94,7 @@ async def _atender(dicho: str, canal: str, idioma: str = "es") -> tuple[Any, str
     ) as traza:
         async with app.state.fabrica() as bd:
             corredores = RepositorioCorredor(bd)
-            corredor = await corredores.obtener_o_crear_piloto()
+            corredor = await corredores.obtener_o_crear_por_sesion(clave)
             agenda = RepositorioCarrera(bd)
 
             # El coach retoma donde quedó, aunque el servidor se haya reiniciado.
@@ -266,8 +274,9 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
 
         async with app.state.fabrica() as bd:
             corredores = RepositorioCorredor(bd)
-            corredor = await corredores.obtener_o_crear_piloto()
-            await corredores.vincular_telegram(corredor.id, mensaje.chat_id)
+            # Cada chat de Telegram es su propio corredor: antes todos
+            # caían en el mismo y se leían la conversación entre sí.
+            corredor = await corredores.obtener_o_crear(mensaje.chat_id)
 
             historial = await corredores.ultimos_turnos(
                 corredor.id, TURNOS_RECORDADOS
@@ -324,6 +333,39 @@ def _arrancar_sondeo(app: FastAPI) -> asyncio.Task[None] | None:
 app = FastAPI(title="Pacer", lifespan=ciclo_de_vida)
 app.include_router(router_interno)
 
+COOKIE_SESION = "pacer_sesion"
+# Un año: el corredor anónimo no debería perder su plan por no abrir la app en
+# una semana. Quien quiera que sobreviva a borrar cookies, crea una cuenta.
+DURACION_SESION = 60 * 60 * 24 * 365
+
+
+@app.middleware("http")
+async def sesion_del_navegador(request: Request, call_next: Any) -> Response:
+    """Da a cada navegador su propia identidad.
+
+    Antes toda visita resolvía al primer corredor de la tabla: compartir el
+    enlace era compartir la cuenta, el plan y la conversación. La cookie es lo
+    único que separa a una persona de otra mientras no haya cuenta.
+    """
+    traida = request.cookies.get(COOKIE_SESION)
+    request.state.sesion = traida or llave_de_sesion()
+
+    respuesta: Response = await call_next(request)
+
+    if request.state.sesion != traida:
+        respuesta.set_cookie(
+            COOKIE_SESION,
+            request.state.sesion,
+            max_age=DURACION_SESION,
+            httponly=True,   # el JavaScript de la página no tiene por qué leerla
+            samesite="lax",
+        )
+    return respuesta
+
+
+def _clave(request: Request) -> str:
+    return str(request.state.sesion)
+
 
 IDIOMAS_QUE_HABLA = frozenset({"es", "en"})
 
@@ -343,6 +385,7 @@ def _idioma(valor: Any) -> str:
 
 @app.post("/api/turno")
 async def turno(
+    request: Request,
     audio: UploadFile,
     tareas: BackgroundTasks,
     x_pacer_idioma: str | None = Header(default=None),
@@ -383,7 +426,7 @@ async def turno(
     ms_stt = int((time.perf_counter() - arranque) * 1000)
 
     resultado, turno_id = await _atender(
-        transcripcion.texto, canal="web", idioma=idioma
+        transcripcion.texto, canal="web", clave=_clave(request), idioma=idioma
     )
     ms_total = int((time.perf_counter() - arranque) * 1000)
 
@@ -411,7 +454,9 @@ async def voz(turno_id: str) -> Response:
 
 
 @app.post("/api/mensaje")
-async def mensaje(cuerpo: dict[str, Any], tareas: BackgroundTasks) -> JSONResponse:
+async def mensaje(
+    request: Request, cuerpo: dict[str, Any], tareas: BackgroundTasks
+) -> JSONResponse:
     """Un turno escrito. Mismo coach, mismo pipeline, sin transcripción.
 
     Existe para los chips de sugerencia y para el modo texto: en un producto de
@@ -422,7 +467,9 @@ async def mensaje(cuerpo: dict[str, Any], tareas: BackgroundTasks) -> JSONRespon
         return JSONResponse({"error": "mensaje_vacio"}, status_code=400)
 
     arranque = time.perf_counter()
-    resultado, turno_id = await _atender(texto, canal="web", idioma=_idioma(cuerpo))
+    resultado, turno_id = await _atender(
+        texto, canal="web", clave=_clave(request), idioma=_idioma(cuerpo)
+    )
     ms_total = int((time.perf_counter() - arranque) * 1000)
 
     if resultado.texto:
@@ -432,13 +479,13 @@ async def mensaje(cuerpo: dict[str, Any], tareas: BackgroundTasks) -> JSONRespon
 
 
 @app.get("/api/plan")
-async def plan_actual() -> dict[str, Any]:
+async def plan_actual(request: Request) -> dict[str, Any]:
     """El plan vigente y el perfil, para las pantallas de plan y agenda."""
     hoy = hoy_del_corredor()
 
     async with app.state.fabrica() as bd:
         corredores = RepositorioCorredor(bd)
-        corredor = await corredores.obtener_o_crear_piloto()
+        corredor = await corredores.obtener_o_crear_por_sesion(_clave(request))
         plan = await RepositorioPlan(bd).version_activa(corredor.id)
 
     perfil = corredor.perfil
@@ -525,7 +572,7 @@ async def plan_actual() -> dict[str, Any]:
 
 
 @app.delete("/api/plan")
-async def borrar_plan() -> dict[str, Any]:
+async def borrar_plan(request: Request) -> dict[str, Any]:
     """Descarta el plan entero, con todas sus versiones.
 
     Es distinto de ajustar: ajustar produce una v2 y archiva la anterior. Esto
@@ -533,16 +580,16 @@ async def borrar_plan() -> dict[str, Any]:
     coach siga recordando sesiones de algo que ya no existe.
     """
     async with app.state.fabrica() as bd:
-        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_por_sesion(_clave(request))
         borradas = await RepositorioPlan(bd).borrar_todo(corredor.id)
 
     return {"borradas": borradas}
 
 
 @app.get("/api/carreras")
-async def carreras() -> dict[str, Any]:
+async def carreras(request: Request) -> dict[str, Any]:
     async with app.state.fabrica() as bd:
-        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_por_sesion(_clave(request))
         apuntadas = await RepositorioCarrera(bd).todas(corredor.id)
 
     objetivo = corredor.perfil.fecha_carrera
@@ -550,7 +597,7 @@ async def carreras() -> dict[str, Any]:
 
 
 @app.post("/api/carreras")
-async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
+async def agregar_carrera(request: Request, cuerpo: dict[str, Any]) -> JSONResponse:
     """Apunta una carrera desde el calendario.
 
     El coach la ve en el turno siguiente porque el bloque de estado se arma
@@ -574,7 +621,7 @@ async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
         return JSONResponse({"error": "distancia_fuera_de_rango"}, status_code=400)
 
     async with app.state.fabrica() as bd:
-        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_por_sesion(_clave(request))
         guardada = await RepositorioCarrera(bd).agregar(
             corredor.id,
             Carrera(
@@ -589,7 +636,7 @@ async def agregar_carrera(cuerpo: dict[str, Any]) -> JSONResponse:
 
 
 @app.post("/api/carreras/{carrera_id}/objetivo")
-async def elegir_objetivo(carrera_id: int) -> JSONResponse:
+async def elegir_objetivo(request: Request, carrera_id: int) -> JSONResponse:
     """Marca una carrera como la que se está entrenando.
 
     Es lo que faltaba: con varias carreras apuntadas, nada decía cuál era la
@@ -598,7 +645,7 @@ async def elegir_objetivo(carrera_id: int) -> JSONResponse:
     """
     async with app.state.fabrica() as bd:
         corredores = RepositorioCorredor(bd)
-        corredor = await corredores.obtener_o_crear_piloto()
+        corredor = await corredores.obtener_o_crear_por_sesion(_clave(request))
         elegida = next(
             (
                 c
@@ -638,9 +685,9 @@ async def elegir_objetivo(carrera_id: int) -> JSONResponse:
 
 
 @app.delete("/api/carreras/{carrera_id}")
-async def quitar_carrera(carrera_id: int) -> JSONResponse:
+async def quitar_carrera(request: Request, carrera_id: int) -> JSONResponse:
     async with app.state.fabrica() as bd:
-        corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_por_sesion(_clave(request))
         existia = await RepositorioCarrera(bd).quitar(corredor.id, carrera_id)
 
     if not existia:
@@ -708,6 +755,79 @@ def _tablero_json(tablero: Tablero) -> dict[str, Any]:
             for h in tablero.actividad
         ],
     }
+
+
+# ── Cuenta ───────────────────────────────────────────────────────────────
+# Opcional a propósito: se entra, se prueba y se corre sin registrarse. La
+# cuenta existe para no perder el plan al cambiar de teléfono o borrar cookies,
+# y por eso ADOPTA el corredor anónimo en vez de crear uno nuevo.
+
+
+@app.get("/api/cuenta")
+async def cuenta(request: Request) -> dict[str, Any]:
+    async with app.state.fabrica() as bd:
+        corredor = await RepositorioCorredor(bd).obtener_o_crear_por_sesion(
+            _clave(request)
+        )
+    return {"email": corredor.email, "nombre": corredor.perfil.nombre}
+
+
+@app.post("/api/cuenta/registro")
+async def registrarse(request: Request, cuerpo: dict[str, Any]) -> JSONResponse:
+    """Le pone cuenta al corredor que ya venías usando. No pierdes el plan."""
+    email = str(cuerpo.get("email", "")).strip().lower()
+    if "@" not in email or len(email) < 5:
+        return JSONResponse({"error": "correo_invalido"}, status_code=400)
+
+    try:
+        hash_de_clave = cifrar(str(cuerpo.get("password", "")))
+    except ClaveInvalida as flojo:
+        return JSONResponse(
+            {"error": "clave_debil", "explicacion": flojo.razon}, status_code=400
+        )
+
+    async with app.state.fabrica() as bd:
+        corredores = RepositorioCorredor(bd)
+        corredor = await corredores.obtener_o_crear_por_sesion(_clave(request))
+        if corredor.email:
+            return JSONResponse({"error": "ya_tiene_cuenta"}, status_code=409)
+        if not await corredores.guardar_credenciales(corredor.id, email, hash_de_clave):
+            return JSONResponse({"error": "correo_ocupado"}, status_code=409)
+
+    return JSONResponse({"email": email})
+
+
+@app.post("/api/cuenta/entrar")
+async def entrar(request: Request, cuerpo: dict[str, Any]) -> JSONResponse:
+    """Ata este navegador a la cuenta. El plan que trae la cuenta es el que vale."""
+    email = str(cuerpo.get("email", "")).strip().lower()
+
+    async with app.state.fabrica() as bd:
+        corredores = RepositorioCorredor(bd)
+        corredor = await corredores.por_email(email)
+
+        # Mismo error para correo inexistente y contraseña mala: distinguirlos
+        # convierte el login en un buscador de correos registrados.
+        if corredor is None or not coincide(
+            str(cuerpo.get("password", "")), corredor.password_hash
+        ):
+            return JSONResponse({"error": "no_coincide"}, status_code=401)
+
+        await corredores.mudar_sesion(corredor.id, _clave(request))
+
+    return JSONResponse({"email": email, "nombre": corredor.perfil.nombre})
+
+
+@app.post("/api/cuenta/salir")
+async def salir(request: Request) -> JSONResponse:
+    """Suelta el navegador. La cuenta y su plan quedan intactos.
+
+    La cookie se borra en vez de reasignarse: el siguiente turno estrena
+    corredor anónimo, que es justo lo que se espera al cerrar sesión.
+    """
+    respuesta = JSONResponse({"salio": True})
+    respuesta.delete_cookie(COOKIE_SESION, samesite="lax", httponly=True)
+    return respuesta
 
 
 @app.get("/api/salud")

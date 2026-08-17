@@ -25,7 +25,7 @@ def uno(corredor_id: int, clave: str, cuando: datetime) -> Recordatorio:
 async def test_se_guarda_y_aparece_como_vencido(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
 
     nuevos = await recordatorios.materializar([uno(corredor.id, "a", AYER)])
     vencidos = await recordatorios.vencidos(HOY)
@@ -39,7 +39,7 @@ async def test_materializar_dos_veces_no_duplica(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
     """El materializador corre cada noche; no puede llenar el chat de repetidos."""
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     mismo = [uno(corredor.id, "a", AYER)]
 
     primera = await recordatorios.materializar(mismo)
@@ -53,7 +53,7 @@ async def test_materializar_dos_veces_no_duplica(
 async def test_lo_que_todavia_no_toca_no_esta_vencido(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
 
     await recordatorios.materializar([uno(corredor.id, "a", MANANA)])
 
@@ -63,7 +63,7 @@ async def test_lo_que_todavia_no_toca_no_esta_vencido(
 async def test_confirmar_lo_saca_de_los_vencidos(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     await recordatorios.materializar([uno(corredor.id, "a", AYER)])
     pendiente = (await recordatorios.vencidos(HOY))[0]
 
@@ -77,7 +77,7 @@ async def test_confirmar_dos_veces_no_reenvia(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
     """Un reintento de n8n devuelve False; nunca duplica la entrega."""
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     await recordatorios.materializar([uno(corredor.id, "a", AYER)])
     pendiente = (await recordatorios.vencidos(HOY))[0]
 
@@ -98,7 +98,7 @@ async def test_el_vencido_viaja_con_el_chat_al_que_va(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
     """A quién entregar lo decide el backend, no un campo fijo en n8n."""
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     await corredores.vincular_telegram(corredor.id, 987654)
     await recordatorios.materializar([uno(corredor.id, "a", AYER)])
 
@@ -113,7 +113,7 @@ async def test_sin_canal_vinculado_no_sale_a_entregarse(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
     """Un recordatorio sin destino solo haría fallar la entrega."""
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     await recordatorios.materializar([uno(corredor.id, "a", AYER)])
 
     assert await recordatorios.vencidos_con_destino(HOY) == []
@@ -140,7 +140,7 @@ async def test_cada_corredor_recibe_en_su_propio_chat(
 async def test_los_vencidos_salen_del_mas_viejo_al_mas_nuevo(
     corredores: RepositorioCorredor, recordatorios: RepositorioRecordatorio
 ) -> None:
-    corredor = await corredores.obtener_o_crear_piloto()
+    corredor = await corredores.obtener_o_crear_por_sesion("sesion-de-prueba")
     anteayer = datetime(2026, 8, 19, 19, tzinfo=UTC)
 
     await recordatorios.materializar(

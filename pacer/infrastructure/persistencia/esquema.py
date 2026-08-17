@@ -11,8 +11,11 @@ cuanto el proyecto tenga más de un entorno con datos que importen.
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy import Connection, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.schema import CreateIndex
 
 from pacer.infrastructure.persistencia.modelos import Base
 
@@ -45,7 +48,39 @@ def agregar_columnas_nuevas(conexion: Connection) -> list[str]:
             )
             agregadas.append(f"{tabla.name}.{columna.name}")
 
+        agregadas += _indices_que_faltan(conexion, inspector, tabla)
+
     if agregadas:
-        registro.info("esquema al día, columnas agregadas: %s", ", ".join(agregadas))
+        registro.info("esquema al día: %s", ", ".join(agregadas))
 
     return agregadas
+
+
+def _indices_que_faltan(conexion: Connection, inspector: Any, tabla: Any) -> list[str]:
+    """Crea los índices declarados en el modelo que la tabla no tenga.
+
+    `ALTER TABLE ADD COLUMN` agrega la columna y NADA más: el UNIQUE que la
+    declaración pedía se queda sin crear. Pasó con `clave_sesion` — sin su
+    índice, dos peticiones simultáneas creaban dos corredores con la misma
+    cookie y la consulta siguiente encontraba dos filas donde va una.
+
+    Un índice que no se puede crear (datos duplicados de antes) se registra
+    fuerte y no detiene el arranque: la app sirve, pero queda constancia.
+    """
+    existentes = {indice["name"] for indice in inspector.get_indexes(tabla.name)}
+    creados = []
+
+    for indice in tabla.indexes:
+        if indice.name in existentes:
+            continue
+        try:
+            conexion.execute(CreateIndex(indice))
+            creados.append(f"índice {indice.name}")
+        except SQLAlchemyError as fallo:
+            registro.error(
+                "NO se pudo crear el índice %s; puede haber duplicados: %s",
+                indice.name,
+                fallo,
+            )
+
+    return creados

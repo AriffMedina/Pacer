@@ -1,8 +1,10 @@
 """Repositorio del corredor y de su conversación."""
 
+from collections.abc import Callable
 from typing import Any, cast
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pacer.domain.entidades.corredor import Corredor
@@ -25,39 +27,106 @@ class RepositorioCorredor:
         self._sesion = sesion
 
     async def obtener_o_crear(self, telegram_chat_id: int) -> Corredor:
-        """Identidad por canal: el chat de Telegram basta para el piloto."""
-        consulta = select(CorredorORM).where(
-            CorredorORM.telegram_chat_id == telegram_chat_id
+        """Identidad por canal: el chat de Telegram identifica a la persona."""
+        return await self._obtener_o_crear(
+            CorredorORM.telegram_chat_id == telegram_chat_id,
+            lambda: CorredorORM(telegram_chat_id=telegram_chat_id),
         )
-        fila = (await self._sesion.execute(consulta)).scalar_one_or_none()
 
-        if fila is None:
-            fila = CorredorORM(telegram_chat_id=telegram_chat_id)
-            self._sesion.add(fila)
-            await self._sesion.commit()
-            await self._sesion.refresh(fila)
+    async def obtener_o_crear_por_sesion(self, clave: str) -> Corredor:
+        """El corredor de ESTE navegador. Lo crea la primera vez que aparece.
 
-        return _a_dominio(fila)
-
-    async def obtener_o_crear_piloto(self) -> Corredor:
-        """El corredor del piloto: el primero que exista, o uno nuevo.
-
-        Atajo deliberado y acotado. `vision.md` declara el multiusuario fuera de
-        alcance, así que la web y Telegram atienden a la misma persona. El día
-        que haya autenticación, esto se reemplaza por resolver el corredor desde
-        el token — y como todo lo demás ya recibe `corredor_id` por parámetro,
-        es el único lugar que cambia.
+        Reemplaza al viejo "primer corredor de la tabla", que convertía cada
+        visita en la misma persona: mandar el enlace a alguien era darle tu plan.
         """
-        consulta = select(CorredorORM).order_by(CorredorORM.id).limit(1)
-        fila = (await self._sesion.execute(consulta)).scalar_one_or_none()
+        return await self._obtener_o_crear(
+            CorredorORM.clave_sesion == clave,
+            lambda: CorredorORM(clave_sesion=clave),
+        )
 
-        if fila is None:
-            fila = CorredorORM()
-            self._sesion.add(fila)
+    async def _obtener_o_crear(
+        self, condicion: Any, nuevo: Callable[[], CorredorORM]
+    ) -> Corredor:
+        """Buscar y, si no está, crear — a prueba de carreras.
+
+        Al abrir la app salen varias peticiones a la vez con la misma cookie:
+        todas miran, ninguna encuentra y todas intentan insertar. Gana una y el
+        resto choca contra el UNIQUE. Quien pierde no falla: vuelve a mirar y
+        encuentra la fila que acaba de crear la otra. Mirar antes de insertar
+        nunca basta; entre el SELECT y el INSERT cabe otra petición.
+        """
+        fila = (await self._sesion.execute(select(CorredorORM).where(condicion))
+                ).scalar_one_or_none()
+        if fila is not None:
+            return _a_dominio(fila)
+
+        fila = nuevo()
+        self._sesion.add(fila)
+        try:
             await self._sesion.commit()
-            await self._sesion.refresh(fila)
+        except IntegrityError:
+            await self._sesion.rollback()
+            fila = (await self._sesion.execute(select(CorredorORM).where(condicion))
+                    ).scalar_one()
+            return _a_dominio(fila)
 
+        await self._sesion.refresh(fila)
         return _a_dominio(fila)
+
+    async def por_email(self, email: str) -> Corredor | None:
+        consulta = select(CorredorORM).where(CorredorORM.email == email.lower())
+        fila = (await self._sesion.execute(consulta)).scalar_one_or_none()
+        return _a_dominio(fila) if fila is not None else None
+
+    async def guardar_credenciales(
+        self, corredor_id: int, email: str, password_hash: str
+    ) -> bool:
+        """Le pone cuenta al corredor que ya existía. Devuelve si se pudo.
+
+        No crea una fila nueva a propósito: registrarse ADOPTA el corredor que
+        venías usando, así nadie pierde su plan por crear la cuenta.
+        """
+        fila = await self._sesion.get(CorredorORM, corredor_id)
+        if fila is None:
+            return False
+
+        fila.email = email.lower()
+        fila.password_hash = password_hash
+        try:
+            await self._sesion.commit()
+        except IntegrityError:
+            # El UNIQUE del correo es quien decide, no una consulta previa.
+            await self._sesion.rollback()
+            return False
+        return True
+
+    async def mudar_sesion(self, corredor_id: int, clave: str) -> None:
+        """Ata este navegador al corredor indicado. Es lo que hace "entrar".
+
+        Suelta la llave de quien la tuviera antes: `clave_sesion` es UNIQUE y
+        sin eso el UPDATE choca contra el navegador anónimo que la traía.
+        """
+        previo = (
+            await self._sesion.execute(
+                select(CorredorORM).where(CorredorORM.clave_sesion == clave)
+            )
+        ).scalar_one_or_none()
+
+        if previo is not None:
+            if previo.id == corredor_id:
+                return
+            previo.clave_sesion = None
+            await self._sesion.flush()
+
+        fila = await self._sesion.get(CorredorORM, corredor_id)
+        if fila is not None:
+            fila.clave_sesion = clave
+        await self._sesion.commit()
+
+    async def con_telegram(self) -> list[Corredor]:
+        """Los corredores que tienen un chat al que escribirles."""
+        consulta = select(CorredorORM).where(CorredorORM.telegram_chat_id.isnot(None))
+        return [_a_dominio(f) for f in (await self._sesion.execute(consulta)).scalars()]
 
     async def vincular_telegram(self, corredor_id: int, chat_id: int) -> None:
         """Ata un chat al corredor la primera vez que escribe."""

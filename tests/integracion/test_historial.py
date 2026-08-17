@@ -14,7 +14,7 @@ CORREDOR = 1
 
 
 async def crear(bd: AsyncSession) -> int:
-    corredor = await RepositorioCorredor(bd).obtener_o_crear_piloto()
+    corredor = await RepositorioCorredor(bd).obtener_o_crear_por_sesion("sesion-de-prueba")
     return corredor.id
 
 
