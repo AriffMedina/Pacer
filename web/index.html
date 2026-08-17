@@ -347,12 +347,12 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   justify-content:center;padding:0 30px;position:relative}
 .orbe-caja{position:relative;display:grid;place-items:center;flex:none}
 #campo{position:absolute;inset:0;pointer-events:none}
-.orbe{position:relative;border-radius:50%;width:clamp(150px,17vw,236px);aspect-ratio:1;
+.orbe{position:relative;border-radius:50%;width:var(--tam-orbe);aspect-ratio:1;
   background:radial-gradient(circle at 50% 46%,#101613 0%,#0A0E0C 62%,#070908 100%);
   box-shadow:0 0 0 1px rgba(198,255,62,.14),0 0 26px 2px rgba(198,255,62,.20),
              0 0 90px 10px rgba(198,255,62,.16),0 0 190px 40px rgba(198,255,62,.10),
              inset 0 0 60px rgba(0,0,0,.9);
-  transition:box-shadow .5s var(--salida)}
+  transition:box-shadow .5s var(--salida),width .42s var(--salida)}
 /* En claro sigue siendo el mismo eclipse, pero de VERDE PROFUNDO, no negro:
    un círculo negro sobre hueso se lee como un agujero en el papel, no como un
    objeto con peso. El verde de la marca lo devuelve al mundo de Pacer. */
@@ -414,6 +414,92 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .chip:active{transform:scale(.97)}
 .chip[disabled]{opacity:.35;pointer-events:none}
 
+/* ═══ Modo texto ═══════════════════════════════════════════════════════
+   No es otra pantalla: es el MISMO coach conversando por escrito. Todo
+   vive dentro de la misma .escena, así que el cambio es un solo
+   movimiento —el orbe se contrae y sube, el hilo se abre debajo— y no un
+   corte de página. El orbe nunca desaparece: es quien te habla. */
+.escena{--tam-orbe:clamp(150px,17vw,236px)}
+.centro.modo-texto .escena{justify-content:flex-start;padding-top:4px;
+  --tam-orbe:clamp(50px,4.6vw,62px)}
+/* El campo de partículas está calibrado para el orbe grande; encogido se
+   retira a un rumor en vez de competir con el texto, que es lo que
+   importa mientras lees. */
+.centro.modo-texto #campo{opacity:.42}
+#campo{transition:opacity .42s var(--salida)}
+.centro.modo-texto .hint{margin-top:13px;font-size:11.5px}
+.centro.modo-texto .dialogo{display:none}
+.centro.modo-texto .sugerencias{display:none}
+/* Hilo vacío: el coach todavía no tiene nada que mostrar, así que las
+   sugerencias vuelven y la escena se recentra. Son las MISMAS chips del
+   modo voz, no una copia. */
+.centro.modo-texto .escena:has(#hilo:empty){justify-content:center}
+.centro.modo-texto .escena:has(#hilo:empty) .charla{flex:0;border:0}
+.centro.modo-texto .escena:has(#hilo:empty) .sugerencias{display:flex}
+
+.charla{display:none;width:min(720px,100%);flex:1;min-height:0;margin-top:18px;
+  overflow-y:auto;overscroll-behavior:contain;
+  border-top:1px solid var(--linea);border-bottom:1px solid var(--linea);
+  scrollbar-width:thin;scrollbar-color:var(--linea-fuerte) transparent}
+.charla::-webkit-scrollbar{width:6px}
+.charla::-webkit-scrollbar-thumb{background:var(--linea-fuerte);border-radius:99px}
+.centro.modo-texto .charla{display:block}
+.hilo{display:flex;flex-direction:column;gap:15px;padding:22px 6px 4px}
+.linea{display:flex;align-items:flex-start;gap:11px;max-width:100%}
+.linea.mia{flex-direction:row-reverse}
+/* Casi transparentes a propósito: el peso lo llevan el texto y el filete,
+   no un bloque de color. La esquina de anclaje pierde radio para que la
+   burbuja apunte a quien la dijo. */
+.burbu{max-width:min(78%,520px);padding:13px 17px 10px;border-radius:19px;
+  font-size:15px;line-height:1.55;text-wrap:pretty;white-space:pre-wrap;
+  animation:entra-burbuja .34s var(--salida) both}
+.burbu.suya{background:var(--tarjeta);border:1px solid var(--linea);
+  border-bottom-left-radius:6px}
+.burbu.mia{background:color-mix(in srgb,var(--acento) 9%,transparent);
+  border:1px solid color-mix(in srgb,var(--acento) 26%,transparent);
+  border-bottom-right-radius:6px}
+/* --texto-3 se queda en 3.75:1 sobre la tarjeta: a 10px eso no se lee.
+   La hora usa el gris de cuerpo, atenuado por opacidad en vez de por un
+   color más apagado. */
+.hora{display:block;margin-top:8px;font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:.06em;color:var(--texto-2);opacity:.85;
+  font-variant-numeric:tabular-nums}
+.avatar{width:29px;height:29px;flex:none;margin-top:2px;border-radius:50%;
+  display:grid;place-items:center;
+  border:1px solid color-mix(in srgb,var(--acento) 48%,transparent);
+  background:color-mix(in srgb,var(--acento) 7%,transparent);
+  box-shadow:0 1px 16px -3px color-mix(in srgb,var(--acento) 42%,transparent)}
+.avatar svg{width:15px;height:15px;color:var(--acento)}
+.linea.mia .avatar{display:none}
+/* Que el coach está pensando se dice en el hilo, donde estás mirando.
+   Lo dispara la clase que el orbe ya tenía: sin lógica nueva. */
+.linea-tecleando{display:none;padding:0 6px 20px}
+#orbe-caja.pensando ~ .charla .linea-tecleando{display:flex}
+.tecleando{display:flex;gap:5px;align-items:center;padding:15px 18px;
+  border-radius:19px;border-bottom-left-radius:6px;
+  background:var(--tarjeta);border:1px solid var(--linea)}
+.tecleando i{width:5px;height:5px;border-radius:50%;background:var(--acento);
+  animation:latir 1.15s var(--entra-sale) infinite}
+.tecleando i:nth-child(2){animation-delay:.15s}
+.tecleando i:nth-child(3){animation-delay:.3s}
+@keyframes entra-burbuja{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+@keyframes latir{0%,60%,100%{opacity:.28;transform:translateY(0)}
+                 30%{opacity:1;transform:translateY(-3px)}}
+/* En claro el filete del hilo es tinta, no lima: sobre papel el verde
+   claro desaparece y las burbujas quedan flotando sin contorno. */
+/* En claro el acento es verde OSCURO, así que teñir al 9% daba un gris
+   sucio: las dos burbujas se veían iguales y se perdía quién dijo qué.
+   Sobre papel el tinte tiene que venir del lima, no del acento. */
+:root[data-tema="claro"] .burbu.mia{background:rgba(150,205,50,.20);
+  border-color:rgba(62,90,11,.30)}
+:root[data-tema="claro"] .burbu.suya{border-color:rgba(7,22,18,.14)}
+:root[data-tema="claro"] .charla{border-color:rgba(7,22,18,.13)}
+:root[data-tema="claro"] .tecleando{border-color:rgba(7,22,18,.14)}
+@media (prefers-reduced-motion:reduce){
+  .burbu{animation:none}
+  .tecleando i{animation:none;opacity:.6}
+}
+
 .controles{display:flex;align-items:center;justify-content:center;gap:16px;
   padding:22px 30px 28px;flex:none;position:relative}
 .redondo{width:50px;height:50px;border-radius:50%;flex:none;display:grid;place-items:center;
@@ -433,9 +519,21 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .hablar[disabled]{opacity:.4;box-shadow:none}
 .hablar svg{width:18px;height:18px;stroke-width:1.8}
 
-.escritura{display:none;align-items:center;gap:11px;width:min(560px,100%)}
+/* El input se alinea con el ancho del hilo: la conversación y donde se
+   escribe son la misma columna. */
+/* min-width:0 en el contenedor, no solo en el input: un <input> arrastra un
+   mínimo intrínseco de 20 caracteres (~227px) por su atributo `size`, y sin
+   esto la fila entera se niega a encoger y empuja el engrane fuera de un
+   teléfono. */
+.escritura{display:none;align-items:center;gap:11px;min-width:0;width:min(560px,100%)}
 .escritura.on{display:flex}
-.escritura input{flex:1;height:52px;border-radius:99px;border:1px solid var(--linea-fuerte);
+.centro.modo-texto .escritura{width:min(720px,100%)}
+#btn-teclado .ic-voz{display:none}
+.centro.modo-texto #btn-teclado .ic-teclado{display:none}
+.centro.modo-texto #btn-teclado .ic-voz{display:block}
+/* min-width:0 o el input se niega a bajar de su ancho de contenido y empuja
+   el engrane fuera de la pantalla en un teléfono. */
+.escritura input{flex:1;min-width:0;height:52px;border-radius:99px;border:1px solid var(--linea-fuerte);
   background:var(--tarjeta);padding:0 22px;font-size:15px;outline:none;
   transition:border-color .2s var(--salida)}
 .escritura input:focus{border-color:var(--acento)}
@@ -753,7 +851,9 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
      solo contra el ancho: en un teléfono corto la esfera y las sugerencias se
      montaban sobre los controles. Con svh encoge de forma continua en vez de
      romperse en un punto de corte. */
-  .orbe{width:clamp(124px,min(46vw,23svh),224px)}
+  /* Vía la variable, no vía `width`: si se fija aquí, el orbe del modo texto
+     nunca encoge porque esta regla es más específica. */
+  .escena{--tam-orbe:clamp(124px,min(46vw,23svh),224px)}
   /* Aire de sobra entre la esfera y las sugerencias: pegadas parecían parte
      de la esfera y no otra cosa que se puede tocar. */
   .hint{margin-top:clamp(16px,4.4svh,38px)}
@@ -768,6 +868,20 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
   .controles{padding:14px 20px 18px;gap:12px}
   .hablar{flex:1;padding:0 16px;font-size:11px;letter-spacing:.1em;white-space:nowrap}
   .escritura{width:auto;flex:1}
+  /* En texto y en un teléfono, el hilo es la pantalla: el orbe se queda de
+     firma, no de protagonista, y el ancho lo toma todo. */
+  .centro.modo-texto .escena{padding-top:2px;--tam-orbe:clamp(44px,11svh,58px)}
+  .centro.modo-texto .escritura{width:auto;flex:1}
+  /* En texto los controles ceden tamaño: el protagonista es el hilo, y con
+     cuatro botones a 50px el placeholder se cortaba a media palabra. */
+  .centro.modo-texto #controles{gap:10px}
+  .centro.modo-texto .redondo,.centro.modo-texto .enviar{width:46px;height:46px}
+  .centro.modo-texto .escritura{gap:9px}
+  .centro.modo-texto .escritura input{height:46px;padding:0 17px}
+  .centro.modo-texto .hint{margin-top:9px}
+  .charla{width:100%;margin-top:12px}
+  .hilo{padding:16px 0 2px;gap:13px}
+  .burbu{max-width:86%;font-size:14.5px}
   .ajustes{right:20px;left:20px;width:auto;bottom:80px}
   .app.enfocado{grid-template-columns:minmax(0,1fr)}
   .app.enfocado .lateral,.app.enfocado .rail{display:none}
@@ -1086,6 +1200,21 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
       </div>
       <p class="hint" id="hint"></p>
       <div class="dialogo" id="dialogo"></div>
+      <!-- El hilo del modo texto. Vive aquí dentro, junto al orbe, porque
+           es el mismo coach: no una segunda pantalla. -->
+      <div class="charla" id="charla">
+        <ol class="hilo" id="hilo" aria-live="polite"></ol>
+        <div class="linea linea-tecleando" aria-hidden="true">
+          <span class="avatar">
+            <svg viewBox="0 0 46 42" fill="none" stroke="currentColor" stroke-width="4.6"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6.5 26 L13 4 H32.5 a7.6 7.6 0 0 1 0 15.2 H17 L11.5 31"/>
+              <circle cx="8.6" cy="33.4" r="4.4" fill="currentColor" stroke="none"/>
+            </svg>
+          </span>
+          <div class="tecleando"><i></i><i></i><i></i></div>
+        </div>
+      </div>
       <div class="sugerencias" id="sugerencias">
         <p class="rotulillo" data-t="app.sugerencias">Sugerencias</p>
         <div class="chips" id="chips"></div>
@@ -1097,8 +1226,11 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
     <section class="hoja" id="v-progreso" hidden></section>
 
     <div class="controles" id="controles">
+      <!-- Un solo botón para los dos sentidos: teclado lleva a texto, micro
+           devuelve a voz. Dos botones para un mismo eje se contradicen. -->
       <button class="redondo" id="btn-teclado" aria-label="Escribir">
-        <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
+        <svg class="ic-teclado" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
+        <svg class="ic-voz" viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg>
       </button>
       <button class="hablar" id="hablar"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg><span data-t="app.hablar">MANTÉN PARA HABLAR</span></button>
       <form class="escritura" id="escritura">
@@ -1201,6 +1333,7 @@ const T = {
     'tgc.3':'Registrado. Te bajé la carga de esta semana y movimos el fondo al domingo.',
     'cierre.titulo':'Empieza por el diagnóstico.','cierre.sub':'Son cuatro preguntas habladas. En menos de un minuto tienes plan.',
     'pie.lema':'Train unseen','pie.nota':'Plan determinista · voz · Telegram',
+    'app.escribir':'Escribir al coach','app.avoz':'Volver a hablar',
     'app.enfoque':'Modo enfoque','app.sugerencias':'Sugerencias','app.hablar':'MANTÉN PARA HABLAR',
     'app.escribe':'Escríbele al coach…','ajustes.idioma':'Idioma','ajustes.tema':'Tema',
     'nav.coach':'Coach','nav.plan':'Plan','nav.agenda':'Agenda','nav.progreso':'Progreso',
@@ -1306,6 +1439,7 @@ const T = {
     'tgc.3':'Logged. I dropped this week\'s load and moved the long run to Sunday.',
     'cierre.titulo':'Start with the diagnosis.','cierre.sub':'Four spoken questions. You have a plan in under a minute.',
     'pie.lema':'Train unseen','pie.nota':'Deterministic plan · voice · Telegram',
+    'app.escribir':'Write to the coach','app.avoz':'Back to voice',
     'app.enfoque':'Focus mode','app.sugerencias':'Suggestions','app.hablar':'HOLD TO TALK',
     'app.escribe':'Write to your coach…','ajustes.idioma':'Language','ajustes.tema':'Theme',
     'nav.coach':'Coach','nav.plan':'Plan','nav.agenda':'Calendar','nav.progreso':'Progress',
@@ -1383,6 +1517,9 @@ function aplicarIdioma(){
   localStorage.setItem('pacer.idioma', idioma);
   pintarDemo();
   pintarCuenta();
+  // Las horas del hilo se formatean por idioma; hay que rehacerlas.
+  if (historial.length) pintarHilo();
+  $('#btn-teclado').setAttribute('aria-label', t(escribiendo ? 'app.avoz' : 'app.escribir'));
   if (datos) { construirNav(); pintar(); }
 }
 function ponerIdioma(nuevo){
@@ -1500,7 +1637,7 @@ const ICONO = {
 const svg = (id) => `<svg viewBox="0 0 24 24">${ICONO[id] || ''}</svg>`;
 
 /* ═══════════════ Estado ═══════════════ */
-let datos = null, carreras = [], turnos = [], vista = 'coach';
+let datos = null, carreras = [], turnos = [], historial = [], vista = 'coach';
 let ocupado = false, escribiendo = false, semanaVista = null, mesVisible = null, diaElegido = null;
 
 const SECCIONES = ['coach','plan','agenda','progreso'];
@@ -1561,12 +1698,18 @@ function abrirCuenta(){
 $('#btn-cuenta').onclick = (e) => { e.stopPropagation(); abrirCuenta(); };
 $('#landing-sesion').onclick = () => { entrarApp(); setTimeout(abrirCuenta, 260); };
 
+/* Voz ⇄ texto. El mismo coach cambiando de canal, no otra vista: lo único
+   que se mueve es el tamaño del orbe y qué ocupa el centro. */
 $('#btn-teclado').onclick = () => {
   escribiendo = !escribiendo;
   $('#escritura').classList.toggle('on', escribiendo);
   $('#hablar').style.display = escribiendo ? 'none' : 'flex';
-  $('#btn-teclado').classList.toggle('on', escribiendo);
-  if (escribiendo) $('#campo-texto').focus();
+  $('.centro').classList.toggle('modo-texto', escribiendo);
+  $('#btn-teclado').setAttribute('aria-label', t(escribiendo ? 'app.avoz' : 'app.escribir'));
+  if (escribiendo){ pintarHilo(); bajarHilo(); $('#campo-texto').focus(); }
+  // El campo de partículas se dimensiona desde el orbe: hay que volver a
+  // medirlo cuando termina de encoger, o queda con el tamaño anterior.
+  setTimeout(medirCanvas, 460);
 };
 $('#escritura').onsubmit = (e) => {
   e.preventDefault();
@@ -1584,9 +1727,12 @@ function medirCanvas(){
   const caja = $('#orbe-caja').getBoundingClientRect();
   const escena = $('#v-coach').getBoundingClientRect();
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  ancho = Math.max(320, Math.round(escena.width));
-  alto = Math.round(caja.height * 2);
   radio = caja.width / 2;
+  // El campo se mide contra el ORBE, no solo contra la escena: con el orbe
+  // encogido del modo texto, medirlo por la escena dejaba una brizna de polvo
+  // cruzando toda la pantalla en vez de un aura pegada a la esfera.
+  ancho = Math.max(220, Math.min(Math.round(escena.width), Math.round(radio * 11)));
+  alto = Math.round(caja.height * 2);
   lienzo.width = ancho * dpr; lienzo.height = alto * dpr;
   lienzo.style.width = ancho + 'px'; lienzo.style.height = alto + 'px';
   lienzo.style.left = ((caja.width - ancho) / 2) + 'px';
@@ -1747,15 +1893,44 @@ async function reproducir(id){
     anotar(`voz suena a los ${Math.round(performance.now() - t0)} ms`);
   }catch(err){ anotar('no se pudo reproducir: ' + err.message); }
 }
+/* El modo voz muestra los últimos tres turnos atenuándose; el modo texto
+   muestra la conversación entera. Misma fuente, dos lecturas: `historial`
+   guarda todo y `turnos` es su cola de tres. */
+const MARCA_LOGO = `<svg viewBox="0 0 46 42" fill="none" stroke="currentColor" stroke-width="4.6"
+  stroke-linecap="round" stroke-linejoin="round">
+  <path d="M6.5 26 L13 4 H32.5 a7.6 7.6 0 0 1 0 15.2 H17 L11.5 31"/>
+  <circle cx="8.6" cy="33.4" r="4.4" fill="currentColor" stroke="none"/></svg>`;
+
+const hora = (d) => d.toLocaleTimeString(idioma === 'en' ? 'en-US' : 'es-MX',
+  {hour:'2-digit', minute:'2-digit'});
+
+const burbuja = (x) => `<li class="linea ${x.quien}">
+  ${x.quien === 'mio' ? '' : `<span class="avatar" aria-hidden="true">${MARCA_LOGO}</span>`}
+  <div class="burbu ${x.quien === 'mio' ? 'mia' : 'suya'}">${escapar(x.texto)}<span
+    class="hora">${hora(x.cuando)}</span></div></li>`;
+
+function pintarHilo(){ $('#hilo').innerHTML = historial.map(burbuja).join(''); }
+// Pegado abajo salvo que estés leyendo hacia arriba: arrastrarte de vuelta
+// mientras relees es de las cosas más molestas que hace un chat.
+function bajarHilo(){
+  const c = $('#charla');
+  if (c.scrollHeight - c.scrollTop - c.clientHeight < 130) c.scrollTop = c.scrollHeight;
+}
+
 function agregarTurno(quien, texto){
   if (!texto) return;
-  turnos = [...turnos, {quien, texto}].slice(-3);
+  const x = {quien, texto, cuando:new Date()};
+  historial = [...historial, x];
+  turnos = historial.slice(-3);
   // La bienvenida deja de tener sentido en cuanto hay conversación; los
   // estados vivos (te escucho, pensando) los pone quien corresponde.
   if ([t('hint.plan'), t('hint.sin')].includes($('#hint').textContent)) decirHint('');
   $('#dialogo').innerHTML = [...turnos].reverse()
-    .map((x, i) => `<p class="turno n${i} ${x.quien}">${escapar(x.texto)}</p>`).join('');
+    .map((y, i) => `<p class="turno n${i} ${y.quien}">${escapar(y.texto)}</p>`).join('');
   $('#sugerencias').style.display = turnos.length ? 'none' : 'flex';
+  // Se agrega en vez de repintar: repintar reanimaría burbujas ya leídas.
+  $('#hilo').insertAdjacentHTML('beforeend', burbuja(x));
+  bajarHilo();
 }
 const btnHablar = $('#hablar');
 btnHablar.addEventListener('mousedown', empezar);
@@ -1913,7 +2088,7 @@ async function borrarPlan(){
   try{
     const d = await (await fetch('/api/plan', {method:'DELETE'})).json();
     anotar('plan borrado, versiones: ' + d.borradas);
-    turnos = []; $('#dialogo').innerHTML = ''; semanaVista = null;
+    turnos = []; historial = []; $('#dialogo').innerHTML = ''; $('#hilo').innerHTML = ''; semanaVista = null;
     await cargar(); irA('coach');
   }catch(err){ anotar('no se pudo borrar el plan: ' + err.message); }
 }
@@ -2221,7 +2396,7 @@ async function mandarCuenta(url){
       return;
     }
     // Entrar cambia de corredor: hay que releerlo TODO, no solo la cuenta.
-    turnos = []; $('#dialogo').innerHTML = ''; semanaVista = null; mesVisible = null;
+    turnos = []; historial = []; $('#dialogo').innerHTML = ''; $('#hilo').innerHTML = ''; semanaVista = null; mesVisible = null;
     await cargarCuenta();
     await cargar();
     anotar('cuenta: ' + d.email);
