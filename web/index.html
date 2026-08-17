@@ -661,38 +661,84 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
     background:var(--panel)}
   .rail .marca,.perfil{display:none}
   .rail nav{flex-direction:row;width:100%}
-  .rail nav button{flex-direction:column;gap:5px;font-family:'JetBrains Mono',monospace;
-    font-size:9.5px;letter-spacing:.1em;border-radius:0;
-    padding:11px 0 calc(11px + env(safe-area-inset-bottom))}
+  /* Barra de abajo cómoda para el pulgar: 44 px es el mínimo táctil y estas
+     cuatro son la navegación entera de la app. */
+  .rail nav button{flex-direction:column;gap:7px;font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;letter-spacing:.1em;border-radius:0;
+    padding:15px 0 calc(15px + env(safe-area-inset-bottom))}
+  .rail nav svg{width:23px;height:23px}
   .rail nav button.activo{background:none}
   .rail nav button.activo::before{left:50%;transform:translateX(-50%);top:0;bottom:auto;
-    width:26px;height:2px;border-radius:0 0 3px 3px}
-  .lateral{order:2;border-top:1px solid var(--linea);max-height:206px;padding:12px 20px}
-  .lateral .tarjeta{min-width:224px;height:100%;overflow:hidden}
-  .cabecera{padding:18px 20px 0;align-items:center}
+    width:30px;height:2px;border-radius:0 0 3px 3px}
+  /* La tira de estadísticas viaja al DOM del centro (ver acomodarLateral) para
+     quedar justo debajo del saludo: es lo primero que se mira al abrir. */
+  .centro > .lateral{order:0;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+    border:0;border-radius:0;background:none;flex:none;
+    padding:clamp(8px,1.6svh,14px) 20px 4px;
+    /* Cada tarjeta mide lo suyo: estiradas todas a la más alta, a la de racha
+       le quedaba medio palmo de vacío dentro. */
+    align-items:flex-start;
+    scrollbar-width:none;scroll-snap-type:x mandatory}
+  .centro > .lateral::-webkit-scrollbar{display:none}
+  .centro > .lateral .tarjeta{min-width:min(74vw,290px);flex:none;scroll-snap-align:start;
+    padding:16px}
+  .centro > .lateral .cifra{font-size:38px}
+  .centro > .lateral .semana{margin-top:16px}
+  .centro > .lateral .punto{width:11px;height:11px}
+  /* Las tarjetas se estiran a la altura de la más alta, así que la tira mide lo
+     que mida la de actividad. Tres entradas bastan para un vistazo y es lo que
+     deja sitio a la esfera y a las sugerencias en la misma pantalla. */
+  .centro > .lateral .actividad li:nth-child(n+4){display:none}
+  .cabecera{padding:16px 20px 0;align-items:center}
   .saludo{font-size:21px}
   .bajada{display:none}
   .pildora span{display:none}
   .pildora{padding:10px;gap:0}
   .hoja{padding-left:20px;padding-right:20px}
-  .escena{padding:6px 20px 0;justify-content:flex-start;overflow-y:auto}
+  .escena{padding:0 20px;justify-content:flex-start;overflow-y:auto}
   .escena > .orbe-caja{margin-top:auto}
   .escena > .sugerencias{margin-bottom:auto}
-  .orbe{width:clamp(112px,33vw,158px)}
-  .hint{margin-top:20px}
+  /* Todo lo de la pantalla del coach se mide contra la ALTURA disponible, no
+     solo contra el ancho: en un teléfono corto la esfera y las sugerencias se
+     montaban sobre los controles. Con svh encoge de forma continua en vez de
+     romperse en un punto de corte. */
+  .orbe{width:clamp(124px,min(46vw,23svh),224px)}
+  /* Aire de sobra entre la esfera y las sugerencias: pegadas parecían parte
+     de la esfera y no otra cosa que se puede tocar. */
+  .hint{margin-top:clamp(16px,4.4svh,38px)}
   .dialogo{min-height:0}
-  .sugerencias{margin-top:18px;width:100%;align-items:stretch;padding-bottom:6px}
+  .sugerencias{margin-top:clamp(14px,3.8svh,32px);width:100%;align-items:stretch;
+    padding-bottom:6px}
   .rotulillo{text-align:center}
   .chips{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;padding:2px 20px;
     margin:0 -20px;scrollbar-width:none}
   .chips::-webkit-scrollbar{display:none}
   .chip{flex:none}
   .controles{padding:14px 20px 18px;gap:12px}
-  .hablar{flex:1;padding:0 16px;font-size:11px;letter-spacing:.1em}
+  .hablar{flex:1;padding:0 16px;font-size:11px;letter-spacing:.1em;white-space:nowrap}
   .escritura{width:auto;flex:1}
   .ajustes{right:20px;left:20px;width:auto;bottom:80px}
   .app.enfocado{grid-template-columns:minmax(0,1fr)}
   .app.enfocado .lateral,.app.enfocado .rail{display:none}
+}
+
+/* Teléfonos cortos (un 360×640 sigue siendo muchísima gente). Aquí la tira de
+   estadísticas cede: sin esto la esfera se comía la pantalla y las sugerencias
+   quedaban fuera de cuadro, que es exactamente el fallo que esto arregla. */
+@media (max-width:900px) and (max-height:760px){
+  .saludo{font-size:18px}
+  .cabecera{padding:12px 20px 0}
+  .centro > .lateral .semana{display:none}
+  .centro > .lateral .tarjeta{padding:14px;min-width:min(70vw,270px)}
+  .centro > .lateral .cifra{font-size:30px}
+  .centro > .lateral .actividad li:nth-child(n+3){display:none}
+  .orbe{width:clamp(104px,min(40vw,18svh),150px)}
+  .chip{padding:9px 15px;font-size:13px}
+  .sugerencias{margin-top:clamp(12px,2.6svh,22px)}
+  .controles{padding:10px 20px 14px}
+  .hablar{height:54px;font-size:10px;letter-spacing:.08em}
+  .redondo{width:46px;height:46px}
+  .rail nav button{padding:11px 0 calc(11px + env(safe-area-inset-bottom))}
 }
 </style>
 </head>
@@ -1996,6 +2042,19 @@ function pintarProgreso(){
         <i style="height:${Math.max(3, s.km_total / tope * 100)}%"></i><b>${s.numero}</b></div>`).join('')}</div>
     <p class="vacio">${t('pr.rayada')}</p>`;
 }
+/* En móvil las estadísticas van DEBAJO DEL SALUDO, no al final de la pantalla:
+   son lo primero que se mira al abrir la app. En escritorio vuelven a su
+   columna. Se mueve el nodo en vez de duplicarlo para que no haya dos verdades. */
+const angosto = matchMedia('(max-width: 900px)');
+function acomodarLateral(){
+  const lateral = $('#lateral'), centro = document.querySelector('.centro');
+  if (angosto.matches) centro.insertBefore(lateral, $('#v-coach'));
+  else $('#app').appendChild(lateral);
+  medirCanvas();
+}
+angosto.addEventListener('change', acomodarLateral);
+acomodarLateral();
+
 /* ═══════════════ Arranque ═══════════════ */
 aplicarIdioma();
 construirNav();
