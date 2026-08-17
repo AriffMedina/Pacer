@@ -1,0 +1,59 @@
+# Producción en EC2. Se aplica ENCIMA del compose base, no en su lugar:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Tres diferencias con el de desarrollo, y las tres son de seguridad:
+#
+# 1. El montaje de `~/.aws` desaparece. En EC2 las credenciales las da el rol
+#    de instancia por IMDS, así que no hay llaves en disco. Es el ADR-008
+#    llevado hasta el final: la máquina no guarda ningún secreto de AWS.
+# 2. Nada publica puertos al mundo salvo Caddy. Postgres, la app y n8n solo
+#    existen dentro de la red del compose. El único camino desde fuera es TLS.
+# 3. La contraseña de Postgres deja de ser `pacer`. Que el puerto no esté
+#    publicado ya la protege, pero una credencial de ejemplo en una máquina
+#    con IP pública es de las cosas que uno no quiere tener que explicar.
+#
+# `!reset` borra lo que el compose base declaraba. Sin él, la lista de puertos
+# se SUMA en vez de reemplazarse y todo seguiría expuesto.
+
+services:
+  postgres:
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+
+  app:
+    volumes: !reset []
+    ports: !reset []
+    environment:
+      DATABASE_URL: postgresql+asyncpg://pacer:${POSTGRES_PASSWORD}@postgres:5432/pacer
+
+  n8n:
+    # Sin puerto publicado: n8n no trae autenticación por defecto y dejarlo
+    # abierto sería regalar un ejecutor de workflows con acceso a la API.
+    # Para administrarlo, un túnel desde tu máquina:
+    #   ssh -i ~/.ssh/pacer-ec2.pem -L 5678:localhost:5678 ec2-user@<ip>
+    ports: !reset []
+    environment:
+      N8N_SECURE_COOKIE: "false"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # El dominio manda: Caddy pide el certificado para este nombre y redirige
+      # HTTP a HTTPS solo. Cambiar a un dominio propio es cambiar esta variable.
+      PACER_DOMINIO: ${PACER_DOMINIO:?falta PACER_DOMINIO en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

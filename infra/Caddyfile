@@ -1,0 +1,32 @@
+# TLS para Pacer. Caddy pide el certificado a Let's Encrypt solo, lo renueva
+# solo, y redirige HTTP a HTTPS solo. No hay nada que configurar de eso.
+#
+# El HTTPS no es cosmético: `getUserMedia` —el micrófono— exige contexto
+# seguro. Sobre http:// el navegador ni pide permiso, así que sin certificado
+# la mitad del producto no existe.
+
+{$PACER_DOMINIO} {
+	encode zstd gzip
+
+	# El navegador habla con Caddy; Caddy habla con la app por la red interna
+	# del compose, donde `app` es el nombre del servicio y no localhost.
+	reverse_proxy app:8000 {
+		# La síntesis de voz de un turno largo tarda más que el minuto que
+		# Caddy da por defecto, y cortarla se ve como un coach que se calla.
+		transport http {
+			response_header_timeout 180s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
