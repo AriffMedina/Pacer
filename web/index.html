@@ -322,6 +322,9 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .riel i{display:block;height:100%;width:100%;border-radius:99px;background:var(--lima);
   transform-origin:left;transform:scaleX(var(--p,0));transition:transform .6s var(--salida)}
 .perfil .pie-perfil{font-size:11px;color:var(--texto-3);margin-top:8px}
+.enlace-cuenta{display:block;width:100%;text-align:left;margin-top:9px;font-size:11.5px;
+  color:var(--acento);transition:opacity .2s var(--salida)}
+.enlace-cuenta:hover{opacity:.75}
 
 .cabecera{display:flex;align-items:flex-start;gap:16px;padding:24px 30px 0}
 .cabecera .texto{flex:1;min-width:0}
@@ -829,7 +832,8 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
         </button>
       </div>
-      <button class="boton-chico principal" data-entrar data-t="cta.entrar">Entrar</button>
+      <button class="boton-chico" id="landing-sesion" data-t="cta.sesion">Iniciar sesión</button>
+      <button class="boton-chico principal" data-entrar data-t="cta.entrar">Abrir la app</button>
     </div>
   </header>
 
@@ -1067,6 +1071,12 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg>
         <span data-t="app.enfoque">Modo enfoque</span> <i class="luz"></i>
       </button>
+      <!-- La cuenta vive arriba a la derecha, que es donde la busca todo el
+           mundo. Escondida en ajustes no la encontraba nadie. -->
+      <button class="pildora" id="btn-cuenta">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+        <span id="etiqueta-cuenta" data-t="cuenta.entrar">Entrar</span>
+      </button>
     </div>
 
     <section class="escena" id="v-coach">
@@ -1150,7 +1160,8 @@ function leerParticula(){
    dos copias es como se desincronizan: una sola fuente por clave. */
 const T = {
   es:{
-    'cta.entrar':'Entrar','cta.empezar':'Empezar el diagnóstico','cta.como':'Ver cómo funciona',
+    'cta.entrar':'Abrir la app','cta.sesion':'Iniciar sesión','cuenta.guardar':'Guarda tu progreso',
+    'cta.empezar':'Empezar el diagnóstico','cta.como':'Ver cómo funciona',
     'hero.1':'Corre. Habla.','hero.2':'El plan se mueve contigo.',
     'hero.sub':'Un entrenador de voz para 5K, 10K, medio maratón y maratón. Le cuentas cómo te fue y el plan cambia de verdad — no te lo promete, lo hace.',
     'hero.sello':'Voz, plan y recordatorios. Sin apps que instalar.',
@@ -1254,7 +1265,8 @@ const T = {
     'mesesl':['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'],
   },
   en:{
-    'cta.entrar':'Enter','cta.empezar':'Start the diagnosis','cta.como':'See how it works',
+    'cta.entrar':'Open the app','cta.sesion':'Sign in','cuenta.guardar':'Save your progress',
+    'cta.empezar':'Start the diagnosis','cta.como':'See how it works',
     'hero.1':'Run. Talk.','hero.2':'The plan moves with you.',
     'hero.sub':'A voice coach for 5K, 10K, half marathon and marathon. Tell it how it went and the plan actually changes — it does not promise, it does it.',
     'hero.sello':'Voice, plan and reminders. Nothing to install.',
@@ -1538,6 +1550,17 @@ addEventListener('click', (e) => {
     $('#btn-ajustes').setAttribute('aria-expanded','false');
   }
 });
+/* Los dos caminos a la cuenta abren el MISMO panel: uno solo que mantener. */
+function abrirCuenta(){
+  $('#ajustes').classList.add('on');
+  $('#btn-ajustes').classList.add('on');
+  $('#btn-ajustes').setAttribute('aria-expanded', 'true');
+  $('#grupo-cuenta')?.scrollIntoView({block:'nearest'});
+  if (!cuenta?.email) setTimeout(() => $('#cta-email')?.focus(), 120);
+}
+$('#btn-cuenta').onclick = (e) => { e.stopPropagation(); abrirCuenta(); };
+$('#landing-sesion').onclick = () => { entrarApp(); setTimeout(abrirCuenta, 260); };
+
 $('#btn-teclado').onclick = () => {
   escribiendo = !escribiendo;
   $('#escritura').classList.toggle('on', escribiendo);
@@ -1791,6 +1814,9 @@ function pintarPerfil(){
           datos.objetivo ? ' · ' + NOMBRE_OBJ(datos.objetivo) : ''}</div>
       </div>
     </div>
+    ${cuenta?.email
+      ? `<div class="pie-perfil" style="margin-top:9px">${escapar(cuenta.email)}</div>`
+      : `<button class="enlace-cuenta" id="perfil-cuenta">${t('cuenta.guardar')} →</button>`}
     ${!datos.hay_plan ? `<div class="pie-perfil" style="margin-top:11px">${t('perfil.noplan')}</div>`
       : !datos.arrancado ? `<div class="pie-perfil" style="margin-top:11px">${t('perfil.empieza')} ${datos.dias_para_arrancar} ${t('perfil.dias')}.</div>`
       : `<div class="riel"><i style="--p:${pct / 100}"></i></div>
@@ -2144,6 +2170,13 @@ async function cargarCuenta(){
 }
 
 function pintarCuenta(){
+  // El botón de arriba dice el estado sin abrir nada: o tu correo, o "Entrar".
+  const etiqueta = $('#etiqueta-cuenta');
+  if (etiqueta){
+    etiqueta.textContent = cuenta?.email ? cuenta.email.split('@')[0] : t('cuenta.entrar');
+    $('#btn-cuenta').classList.toggle('on', !!cuenta?.email);
+  }
+
   const caja = $('#grupo-cuenta');
   if (!caja) return;
 
