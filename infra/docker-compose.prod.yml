@@ -1,6 +1,12 @@
 # Producción en EC2. Se aplica ENCIMA del compose base, no en su lugar:
 #
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose --env-file ../.env \
+#     -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# `--env-file ../.env` no es opcional. Compose interpola los `${VAR}` de ESTE
+# archivo desde el .env de su propia carpeta, no desde el de la raíz; el
+# `env_file:` del servicio `app` solo alimenta al contenedor. Sin la bandera,
+# el arranque muere con "required variable POSTGRES_PASSWORD is missing".
 #
 # Tres diferencias con el de desarrollo, y las tres son de seguridad:
 #
