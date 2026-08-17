@@ -6,11 +6,11 @@ un modelo que insiste en llamar herramientas no puede colgar el turno.
 """
 
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Literal
 
 from pacer.application.casos_uso.crear_plan import crear_plan
-from pacer.application.contexto.fechas import interpretar_fecha
+from pacer.application.contexto.fechas import en_palabras, interpretar_fecha
 from pacer.application.herramientas.despachador import despachar
 from pacer.application.herramientas.esquemas import catalogo_para_bedrock
 from pacer.domain.entidades.carrera import Carrera
@@ -20,6 +20,11 @@ from pacer.domain.puertos.llm import LlamadaHerramienta, PuertoLLM
 from pacer.domain.reglas.duracion import PlanImposible
 from pacer.domain.servicios.ajustador import ajustar
 from pacer.domain.servicios.categoria import categoria_de_km, como_se_entrena
+from pacer.domain.servicios.mover import (
+    MovimientoImposible,
+    dias_libres,
+    mover_sesion,
+)
 from pacer.domain.servicios.registro import registrar
 from pacer.domain.servicios.resolutor import resolver_sesion
 
@@ -142,6 +147,8 @@ def procesar_turno(
                     plan, resultado = _generar(perfil, hoy, previo=plan)
                 elif llamada.nombre == "registrar_sesion":
                     plan, resultado = _registrar_y_ajustar(plan, llamada.entrada, hoy)
+                elif llamada.nombre == "mover_sesion":
+                    plan, resultado = _mover(plan, llamada.entrada, hoy)
                 elif llamada.nombre == "apuntar_carrera":
                     nueva, resultado = _apuntar_carrera(llamada.entrada)
                     if nueva is not None:
@@ -182,6 +189,98 @@ def procesar_turno(
         carreras_nuevas=tuple(apuntadas),
         acciones_agenda=tuple(acciones),
     )
+
+
+def _mover(
+    plan: Plan | None, entrada: dict[str, Any], hoy: date
+) -> tuple[Plan | None, dict[str, Any]]:
+    """Cambia una sesión de día. La regla decide, no la conversación.
+
+    Cuando no se puede, se devuelven el motivo Y los días libres: sin ellos el
+    coach preguntaba "¿qué otro día?" y volvía a chocar contra la misma regla.
+    """
+    if plan is None:
+        return None, {"error": "sin_plan", "explicacion": "todavía no hay plan"}
+
+    origen = _resolver_dia(plan, str(entrada.get("pista_temporal", "")), hoy)
+    if origen is None:
+        return plan, {
+            "error": "no_entendi_que_dia_mover",
+            "como_seguir": "Pregúntale qué día exactamente quiere cambiar.",
+        }
+
+    destino = interpretar_fecha(str(entrada.get("nuevo_dia", ""))) or _dia_hablado(
+        str(entrada.get("nuevo_dia", "")), hoy
+    )
+    if destino is None:
+        return plan, {
+            "error": "no_entendi_el_dia_nuevo",
+            "como_seguir": "Pregúntale a qué día quiere moverla.",
+        }
+
+    try:
+        nuevo = mover_sesion(plan, origen, destino, hoy=hoy)
+    except MovimientoImposible as rechazo:
+        return plan, {
+            "error": "no_se_puede_mover_ahi",
+            "razon_para_explicar": rechazo.razon,
+            # Dichos enteros, no en ISO: con la fecha cruda el modelo deduce el
+            # día de la semana y llegó a ofrecer "el martes 19" siendo miércoles.
+            "dias_libres": [en_palabras(d) for d in dias_libres(plan, hoy)],
+            "como_decirlo": COMO_DECIR_QUE_NO,
+        }
+
+    return nuevo, {
+        "ok": True,
+        "movida_de": en_palabras(origen),
+        "movida_a": en_palabras(destino),
+    }
+
+
+def _resolver_dia(plan: Plan, pista: str, hoy: date) -> date | None:
+    """El día de la sesión que se quiere mover.
+
+    Se apoya en el resolutor de sesiones, que ya entiende "ayer" y "el martes",
+    pero acepta también días por venir: mover mira hacia adelante, registrar
+    hacia atrás.
+    """
+    directa = interpretar_fecha(pista)
+    if directa is not None:
+        return directa
+
+    hablado = _dia_hablado(pista, hoy)
+    if hablado is not None:
+        return hablado
+
+    resolucion = resolver_sesion(plan, pista, hoy)
+    return resolucion.sesion.fecha if resolucion.sesion else None
+
+
+DIAS_DE_LA_SEMANA = {
+    "lunes": 0, "martes": 1, "miercoles": 2, "miércoles": 2, "jueves": 3,
+    "viernes": 4, "sabado": 5, "sábado": 5, "domingo": 6,
+}
+
+
+def _dia_hablado(pista: str, hoy: date) -> date | None:
+    """"mañana" o "el jueves", mirando HACIA ADELANTE.
+
+    El resolutor de registro busca hacia atrás porque se reporta lo ya corrido;
+    mover es lo contrario y necesita su propia lectura.
+    """
+    texto = pista.strip().lower()
+    if "pasado mañana" in texto:
+        return hoy + timedelta(days=2)
+    if "mañana" in texto:
+        return hoy + timedelta(days=1)
+    if "hoy" in texto:
+        return hoy
+
+    for nombre, indice in DIAS_DE_LA_SEMANA.items():
+        if nombre in texto:
+            adelanto = (indice - hoy.weekday()) % 7
+            return hoy + timedelta(days=adelanto or 7)
+    return None
 
 
 ACCIONES_DE_AGENDA = frozenset(

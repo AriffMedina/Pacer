@@ -103,10 +103,35 @@ class RepositorioCorredor:
         )
         filas = list((await self._sesion.execute(consulta)).scalars())
 
-        return [
-            {"role": fila.rol, "content": [{"text": fila.texto}]}
-            for fila in reversed(filas)
-        ]
+        return _conversacion_valida(
+            [
+                {"role": fila.rol, "content": [{"text": fila.texto}]}
+                for fila in reversed(filas)
+            ]
+        )
+
+
+def _conversacion_valida(historial: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deja el historial como lo exige `converse`: empieza en el corredor y alterna.
+
+    Recortar la ventana puede dejar la primera línea en el coach, y un turno
+    que se cayó a medias deja dos del corredor seguidas. Cualquiera de las dos
+    hace que la API rechace TODOS los turnos siguientes, y eso desde fuera se
+    ve como que el coach perdió la memoria.
+
+    Los mensajes seguidos del mismo lado se juntan en vez de descartarse:
+    tirarlos sería perder de verdad lo que la persona dijo.
+    """
+    while historial and historial[0]["role"] != "user":
+        historial.pop(0)
+
+    juntados: list[dict[str, Any]] = []
+    for mensaje in historial:
+        if juntados and juntados[-1]["role"] == mensaje["role"]:
+            juntados[-1]["content"][0]["text"] += "\n" + mensaje["content"][0]["text"]
+        else:
+            juntados.append(mensaje)
+    return juntados
 
 
 def _a_dominio(fila: CorredorORM) -> Corredor:

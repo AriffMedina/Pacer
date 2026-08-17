@@ -55,10 +55,16 @@ DIRECTORIO_WEB = Path(__file__).resolve().parents[3] / "web"
 registro = logging.getLogger("pacer")
 
 
-# Cuántos turnos anteriores se le recuerdan al modelo. No hace falta más: los
-# hechos —perfil, plan, sesiones— viven en tablas y entran por el bloque de
-# estado. Esto es continuidad de trato, no fuente de verdad.
-TURNOS_RECORDADOS = 12
+# Cuántos MENSAJES anteriores se le recuerdan al modelo. Los hechos —perfil,
+# plan, sesiones— viven en tablas y entran por el bloque de estado; esto es
+# continuidad de trato, no fuente de verdad.
+#
+# Eran 12, o sea seis intercambios. Suena a mucho y no lo es: en una
+# conversación de verdad el corredor pide algo, el coach pregunta, el corredor
+# aclara, y en tres vueltas el principio ya se salió de la ventana. Se sentía
+# —con razón— como hablar con alguien que no se acuerda de lo que acaba de
+# decir. 24 mensajes son doce intercambios y siguen cabiendo de sobra.
+TURNOS_RECORDADOS = 24
 
 # Respuestas esperando ser sintetizadas. Se guardan pocas y se descartan las
 # viejas: nadie pide la voz de un turno de hace veinte turnos.

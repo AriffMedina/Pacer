@@ -30,6 +30,26 @@ _CON_BARRAS = re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$")
 _HABLADA = re.compile(r"^(\d{1,2})\s*(?:de\s+)?([a-záéíóúñ]+)\s*(?:de\s+)?(\d{4})$")
 
 
+DIAS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+NOMBRES_DE_MES = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+
+
+def en_palabras(fecha: date) -> str:
+    """Una fecha dicha entera: día de la semana, día, mes y año.
+
+    Todo lo que le llegue al modelo pasa por aquí. Darle un ISO pelado es
+    pedirle que calcule qué día de la semana cae, y calculando se equivoca:
+    llegó a ofrecer "el martes 19" siendo miércoles.
+    """
+    return (
+        f"{DIAS[fecha.weekday()]} {fecha.day} de "
+        f"{NOMBRES_DE_MES[fecha.month - 1]} de {fecha.year}"
+    )
+
+
 def interpretar_fecha(texto: str) -> date | None:
     """Traduce una fecha escrita de varias formas. `None` si no se entiende."""
     limpio = (texto or "").strip().lower()

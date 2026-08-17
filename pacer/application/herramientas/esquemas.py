@@ -48,6 +48,22 @@ class RegistrarSesion(BaseModel):
     ) = None
 
 
+class MoverSesion(BaseModel):
+    """Úsala cuando el corredor no pueda entrenar un día y quiera cambiarlo.
+
+    Es la respuesta a "el martes no puedo" o "¿lo paso al lunes?". NO decidas
+    tú si se puede: llámala y la regla contesta. Si no se puede, te devuelve el
+    motivo y los días libres para que propongas otro.
+    """
+
+    pista_temporal: str = Field(
+        description="El día que se quiere cambiar, como lo dijo: mañana, el martes, 2026-08-18"
+    )
+    nuevo_dia: str = Field(
+        description="El día al que se mueve, como lo dijo: el lunes, mañana, 2026-08-17"
+    )
+
+
 class GenerarPlan(BaseModel):
     """Úsala solo cuando el perfil esté completo. Si falta algo, pregunta."""
 
@@ -112,6 +128,7 @@ class ElegirCarreraObjetivo(BaseModel):
 HERRAMIENTAS: dict[str, type[BaseModel]] = {
     "actualizar_perfil": ActualizarPerfil,
     "registrar_sesion": RegistrarSesion,
+    "mover_sesion": MoverSesion,
     "generar_plan": GenerarPlan,
     "apuntar_carrera": ApuntarCarrera,
     "mover_carrera": MoverCarrera,

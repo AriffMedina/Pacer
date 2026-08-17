@@ -124,12 +124,14 @@ async def test_solo_se_cargan_los_ultimos_turnos(
     # El historial completo no cabe ni conviene: el estado lo dan las tablas.
     piloto = await corredores.obtener_o_crear_piloto()
     for i in range(10):
-        await corredores.recordar(piloto.id, "user", f"mensaje {i}")
+        await corredores.recordar(piloto.id, "user", f"pregunta {i}")
+        await corredores.recordar(piloto.id, "assistant", f"respuesta {i}")
 
-    turnos = await corredores.ultimos_turnos(piloto.id, cuantos=3)
+    turnos = await corredores.ultimos_turnos(piloto.id, cuantos=4)
 
-    assert len(turnos) == 3
-    assert turnos[-1]["content"][0]["text"] == "mensaje 9"
+    assert len(turnos) == 4
+    assert turnos[0]["role"] == "user"
+    assert turnos[-1]["content"][0]["text"] == "respuesta 9"
 
 
 async def test_la_conversacion_de_otro_corredor_no_se_mezcla(

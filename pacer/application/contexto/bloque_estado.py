@@ -7,6 +7,7 @@ instrucción escrita en el prompt.
 
 from datetime import date, timedelta
 
+from pacer.application.contexto.fechas import en_palabras
 from pacer.domain.entidades.carrera import Carrera, pendientes
 from pacer.domain.entidades.perfil import Perfil
 from pacer.domain.entidades.plan import Plan, Semana, Sesion
@@ -127,14 +128,16 @@ def _linea_carreras(
 
 
 def _fecha_hablada(fecha: date) -> str:
-    """SIEMPRE con año.
+    """SIEMPRE con año y con día de la semana.
 
-    Sin él, el modelo cae al año de su entrenamiento. Pasó: dijo estar en 2024,
-    guardó una carrera de 2027 como 2025 y después rechazó el plan por falta de
-    semanas —coherente con una fecha que él mismo se inventó—. Un dato que el
+    Sin el año el modelo cae al de su entrenamiento —dijo estar en 2024—; sin
+    el día de la semana lo calcula, y calculando se equivoca. Un dato que el
     modelo no tiene no lo deja en blanco: lo rellena.
+
+    Un solo formateador para todo el proyecto: dos copias se desincronizan y
+    entonces el coach dice una cosa en el estado y otra en las herramientas.
     """
-    return f"{DIAS[fecha.weekday()]} {fecha.day} de {MESES[fecha.month - 1]} de {fecha.year}"
+    return en_palabras(fecha)
 
 
 def _linea_del_corredor(perfil: Perfil) -> str:
