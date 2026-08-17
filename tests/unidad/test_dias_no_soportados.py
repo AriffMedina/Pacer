@@ -33,15 +33,15 @@ def _perfil(dias: int) -> Perfil:
 
 
 def test_el_generador_sigue_rechazando_lo_que_no_sabe_componer() -> None:
-    """La restricción del dominio no se toca: cinco días no tienen composición."""
-    assert 5 not in COMPOSICION
+    """Siete días no tienen composición: sin descanso no hay adaptación."""
+    assert 7 not in COMPOSICION
     with pytest.raises(ValueError):
-        crear_plan(_perfil(5), hoy=HOY)
+        crear_plan(_perfil(7), hoy=HOY)
 
 
-def test_pedir_cinco_dias_no_revienta_el_turno() -> None:
+def test_pedir_siete_dias_no_revienta_el_turno() -> None:
     """Lo que antes era un 500 ahora es una respuesta que el modelo puede leer."""
-    plan, respuesta = _generar(_perfil(5), hoy=HOY, previo=None)
+    plan, respuesta = _generar(_perfil(7), hoy=HOY, previo=None)
 
     assert plan is None
     assert "error" in respuesta
@@ -50,7 +50,7 @@ def test_pedir_cinco_dias_no_revienta_el_turno() -> None:
 def test_el_rechazo_dice_cuantos_dias_si_admite() -> None:
     """Sin las alternativas, el coach solo sabe decir que no. El corredor se
     queda igual de atascado que con el 500, pero con mejores modales."""
-    _, respuesta = _generar(_perfil(5), hoy=HOY, previo=None)
+    _, respuesta = _generar(_perfil(7), hoy=HOY, previo=None)
 
     admitidos = respuesta["dias_admitidos"]
     assert sorted(admitidos) == sorted(COMPOSICION)

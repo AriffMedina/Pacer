@@ -24,7 +24,7 @@ from pacer.domain.reglas.largo import (
     SEMANAS_DE_VENTANA,
     tope_por_tiempo,
 )
-from pacer.domain.servicios.generador_plan import generar_plan
+from pacer.domain.servicios.generador_plan import COMPOSICION, generar_plan
 
 INICIO = date(2026, 8, 17)
 
@@ -56,7 +56,9 @@ def perfiles_validos(draw: st.DrawFn) -> dict[str, object]:
             st.integers(min_value=minimo, max_value=SEMANAS[distancia]["max"])
         ),
         "km_semana": draw(st.integers(min_value=km_min, max_value=km_min * 3)),
-        "dias": draw(st.sampled_from([3, 4])),
+        # Se deriva de la tabla del dominio: si mañana entra un reparto nuevo, las
+        # propiedades lo cubren sin que nadie se acuerde de tocar esta lista.
+        "dias": draw(st.sampled_from(sorted(COMPOSICION))),
         "inicio": INICIO,
     }
 

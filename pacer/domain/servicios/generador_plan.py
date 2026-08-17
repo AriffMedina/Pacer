@@ -43,6 +43,27 @@ COMPOSICION: dict[int, dict[str, tuple[int, int]]] = {
         "pico": (1, 2),
         "tapering": (2, 1),
     },
+    # Los días que se ganan a partir del cuarto se llenan de RODAJE SUAVE, no de
+    # más series. Esa es la respuesta técnica a "si al gimnasio voy cinco días,
+    # ¿por qué a correr no?": puedes, y lo que se añade es volumen fácil. Dos
+    # sesiones de calidad por semana es el techo en cualquier composición —
+    # la tercera no entrena más, solo acumula fatiga y lesiona.
+    5: {
+        "base": (4, 0),
+        "construccion": (3, 1),
+        "pico": (2, 2),
+        "tapering": (3, 1),
+    },
+    6: {
+        "base": (5, 0),
+        "construccion": (4, 1),
+        "pico": (3, 2),
+        "tapering": (4, 1),
+    },
+    # No hay 7 a propósito, y no es un hueco por llenar. Sin un día sin correr
+    # no hay adaptación: el músculo se reconstruye descansando, así que una
+    # semana de siete días entrena menos que una de seis. Cuando alguien pide
+    # siete, el coach ofrece seis y llama al séptimo por su nombre.
 }
 
 ORDEN_BLOQUES = ("base", "construccion", "pico", "tapering")
@@ -218,6 +239,23 @@ def _armar_semana(
         dia += 2
 
     sesiones.append(_sesion(inicio, dia, "largo", km_largo))
+
+    # Redondear cada sesión a 0.1 desvía el total de la semana, y el desvío
+    # crece con el número de sesiones: una semana podía quedar 0.2 por debajo
+    # de su objetivo y la siguiente 0.1 por encima. Ese ruido se lee como una
+    # subida del 12.7% donde la progresión pedida era exactamente del 10%, y
+    # con seis sesiones se sale de la tolerancia. El sobrante va al largo, que
+    # es la sesión con más margen para absorberlo sin cambiar de carácter.
+    sobra = round(km_total - sum(s.km for s in sesiones), 1)
+    if sobra:
+        largo = sesiones[-1]
+        ajustado = round(largo.km + sobra, 1)
+        # Salvo que al absorberlo dejara de ser la sesión más larga, que es la
+        # invariante que este reparto existe para sostener.
+        if n_faciles and ajustado < max(s.km for s in sesiones[:n_faciles]):
+            sesiones[0] = replace(sesiones[0], km=round(sesiones[0].km + sobra, 1))
+        else:
+            sesiones[-1] = replace(largo, km=ajustado)
 
     return Semana(
         numero=numero,

@@ -42,12 +42,21 @@ def test_las_semanas_de_descarga_bajan_el_volumen() -> None:
 
 
 def test_ninguna_semana_normal_sube_mas_de_diez_por_ciento() -> None:
+    """Solo entre semanas de carga plena CONSECUTIVAS.
+
+    Filtrar antes de emparejar comparaba una semana anterior a la descarga con
+    otra posterior, o una recortada con la siguiente, y salir de una descarga o
+    de un recorte es recuperación, no progresión. Es el mismo criterio que ya
+    aplicaba `test_regla_del_diez_por_ciento_es_invariante`; a este le faltaba.
+    """
     plan = plan_base()
 
-    de_carga = [semana for semana in plan.semanas if not semana.es_descarga]
+    def plena(semana: object) -> bool:
+        return not semana.es_descarga and not semana.recortada  # type: ignore[attr-defined]
 
-    for previa, actual in pairwise(de_carga):
-        assert actual.km_total <= previa.km_total * 1.10 + 0.5
+    for previa, actual in pairwise(plan.semanas):
+        if plena(previa) and plena(actual):
+            assert actual.km_total <= previa.km_total * 1.10 + 0.5
 
 
 def test_al_menos_78_por_ciento_de_los_km_son_faciles() -> None:
