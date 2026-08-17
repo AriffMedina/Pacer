@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, UploadFile
+from fastapi import BackgroundTasks, FastAPI, Header, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -73,7 +73,7 @@ _YA_SINTETIZADO: OrderedDict[str, bytes] = OrderedDict()
 MAX_PENDIENTES = 20
 
 
-async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
+async def _atender(dicho: str, canal: str, idioma: str = "es") -> tuple[Any, str]:
     """Un turno completo, venga de voz o de texto.
 
     La traza envuelve todo: las llamadas al modelo cuelgan de ella, así en
@@ -105,7 +105,8 @@ async def _atender(dicho: str, canal: str) -> tuple[Any, str]:
                     fecha_carrera=corredor.perfil.fecha_carrera,
                     carreras=apuntadas,
                     perfil=corredor.perfil,
-                )
+                ),
+                idioma=idioma,
             )
 
             resultado = await atender_turno(
@@ -324,10 +325,31 @@ app = FastAPI(title="Pacer", lifespan=ciclo_de_vida)
 app.include_router(router_interno)
 
 
+IDIOMAS_QUE_HABLA = frozenset({"es", "en"})
+
+
+def _idioma(valor: Any) -> str:
+    """El idioma pedido, o español. Nunca confía en lo que llega.
+
+    Va como campo del cuerpo y como cabecera porque el turno de voz manda
+    `multipart` y ahí no cabe un JSON. Un idioma desconocido no es un error que
+    valga la pena: se contesta en español y ya.
+    """
+    if isinstance(valor, dict):
+        valor = valor.get("idioma")
+    pedido = str(valor or "").lower()[:2]
+    return pedido if pedido in IDIOMAS_QUE_HABLA else "es"
+
+
 @app.post("/api/turno")
-async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
+async def turno(
+    audio: UploadFile,
+    tareas: BackgroundTasks,
+    x_pacer_idioma: str | None = Header(default=None),
+) -> JSONResponse:
     """Un turno hablado completo."""
     arranque = time.perf_counter()
+    idioma = _idioma(x_pacer_idioma)
 
     if app.state.stt is None:
         return JSONResponse(
@@ -360,7 +382,9 @@ async def turno(audio: UploadFile, tareas: BackgroundTasks) -> JSONResponse:
 
     ms_stt = int((time.perf_counter() - arranque) * 1000)
 
-    resultado, turno_id = await _atender(transcripcion.texto, canal="web")
+    resultado, turno_id = await _atender(
+        transcripcion.texto, canal="web", idioma=idioma
+    )
     ms_total = int((time.perf_counter() - arranque) * 1000)
 
     # La voz NO se sintetiza aquí: el texto se devuelve en cuanto está y el
@@ -398,7 +422,7 @@ async def mensaje(cuerpo: dict[str, Any], tareas: BackgroundTasks) -> JSONRespon
         return JSONResponse({"error": "mensaje_vacio"}, status_code=400)
 
     arranque = time.perf_counter()
-    resultado, turno_id = await _atender(texto, canal="web")
+    resultado, turno_id = await _atender(texto, canal="web", idioma=_idioma(cuerpo))
     ms_total = int((time.perf_counter() - arranque) * 1000)
 
     if resultado.texto:

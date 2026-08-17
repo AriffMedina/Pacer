@@ -140,8 +140,29 @@ medicamentos), dilo con claridad y redirige.\
 """
 
 
-def construir_prompt(bloque_estado: str | None = None) -> str:
+# El idioma del coach lo elige quien habla, no el prompt. Va como instrucción
+# final para que pese más que el español del resto: lo último que se lee manda.
+EN_INGLES = """\
+
+LANGUAGE: from now on, reply ONLY in English. Every rule above still applies \
+exactly as written — they are instructions for you, not text to translate. Keep \
+the same warmth, the same two-sentence limit and the same single question. Say \
+distances in kilometres, not miles: the plan is in kilometres and converting \
+them would make you say a number that is not in the plan.\
+"""
+
+IDIOMAS = {"es": "", "en": EN_INGLES}
+
+
+def construir_prompt(bloque_estado: str | None = None, idioma: str = "es") -> str:
     """Arma el prompt de sistema, con el estado precalculado si ya hay plan."""
-    if not bloque_estado:
-        return INSTRUCCIONES
-    return f"{INSTRUCCIONES}\n\nESTADO ACTUAL (léelo, no lo calcules):\n{bloque_estado}"
+    partes = [INSTRUCCIONES]
+
+    if bloque_estado:
+        partes.append(f"ESTADO ACTUAL (léelo, no lo calcules):\n{bloque_estado}")
+
+    cierre = IDIOMAS.get(idioma, "")
+    if cierre:
+        partes.append(cierre)
+
+    return "\n\n".join(partes)

@@ -56,6 +56,29 @@ def test_ordena_registrar_la_sesion_sin_esperar_los_kilometros() -> None:
     assert "kilómetros son OPCIONALES" in prompt
 
 
+def test_por_defecto_habla_espanol() -> None:
+    assert "LANGUAGE" not in construir_prompt()
+
+
+def test_en_ingles_la_orden_va_al_final() -> None:
+    """Lo último que se lee pesa más, y el resto del prompt está en español."""
+    prompt = construir_prompt("HOY: domingo", idioma="en")
+
+    assert prompt.rstrip().endswith("not in the plan.")
+    assert "reply ONLY in English" in prompt
+    # Las reglas siguen ahí: se traduce la respuesta, no el manual.
+    assert "REGLA DE HONESTIDAD" in prompt
+
+
+def test_en_ingles_se_le_prohibe_convertir_a_millas() -> None:
+    """Convertir kilómetros diría un número que no está en el plan."""
+    assert "not in the plan" in construir_prompt(idioma="en")
+
+
+def test_un_idioma_que_no_existe_no_rompe_nada() -> None:
+    assert construir_prompt(idioma="klingon") == construir_prompt()
+
+
 def test_le_prohibe_prometer_cambios_que_no_hizo() -> None:
     """El fallo más caro: dijo "listo, ajusto el plan" y el plan no cambió."""
     prompt = construir_prompt()
