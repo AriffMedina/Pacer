@@ -453,10 +453,14 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 .burbu{max-width:min(78%,520px);padding:13px 17px 10px;border-radius:19px;
   font-size:15px;line-height:1.55;text-wrap:pretty;white-space:pre-wrap;
   animation:entra-burbuja .34s var(--salida) both}
-.burbu.suya{background:var(--tarjeta);border:1px solid var(--linea);
-  border-bottom-left-radius:6px}
-.burbu.mia{background:color-mix(in srgb,var(--acento) 9%,transparent);
+/* El acento marca la voz del COACH, no el eco de lo que acabas de escribir:
+   teñir tus propios mensajes hacía que parecieran suyos. El radio de la
+   esquina sigue atado a la POSICIÓN —cada burbuja apunta a quien la dijo—,
+   así que eso no se intercambia. */
+.burbu.suya{background:color-mix(in srgb,var(--acento) 9%,transparent);
   border:1px solid color-mix(in srgb,var(--acento) 26%,transparent);
+  border-bottom-left-radius:6px}
+.burbu.mia{background:var(--tarjeta);border:1px solid var(--linea);
   border-bottom-right-radius:6px}
 /* --texto-3 se queda en 3.75:1 sobre la tarjeta: a 10px eso no se lee.
    La hora usa el gris de cuerpo, atenuado por opacidad en vez de por un
@@ -475,9 +479,11 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
    Lo dispara la clase que el orbe ya tenía: sin lógica nueva. */
 .linea-tecleando{display:none;padding:0 6px 20px}
 #orbe-caja.pensando ~ .charla .linea-tecleando{display:flex}
+/* Los puntos son el coach a medio hablar: van vestidos como sus burbujas. */
 .tecleando{display:flex;gap:5px;align-items:center;padding:15px 18px;
   border-radius:19px;border-bottom-left-radius:6px;
-  background:var(--tarjeta);border:1px solid var(--linea)}
+  background:color-mix(in srgb,var(--acento) 9%,transparent);
+  border:1px solid color-mix(in srgb,var(--acento) 26%,transparent)}
 .tecleando i{width:5px;height:5px;border-radius:50%;background:var(--acento);
   animation:latir 1.15s var(--entra-sale) infinite}
 .tecleando i:nth-child(2){animation-delay:.15s}
@@ -490,11 +496,11 @@ svg{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-l
 /* En claro el acento es verde OSCURO, así que teñir al 9% daba un gris
    sucio: las dos burbujas se veían iguales y se perdía quién dijo qué.
    Sobre papel el tinte tiene que venir del lima, no del acento. */
-:root[data-tema="claro"] .burbu.mia{background:rgba(150,205,50,.20);
+:root[data-tema="claro"] .burbu.suya,
+:root[data-tema="claro"] .tecleando{background:rgba(150,205,50,.20);
   border-color:rgba(62,90,11,.30)}
-:root[data-tema="claro"] .burbu.suya{border-color:rgba(7,22,18,.14)}
+:root[data-tema="claro"] .burbu.mia{border-color:rgba(7,22,18,.14)}
 :root[data-tema="claro"] .charla{border-color:rgba(7,22,18,.13)}
-:root[data-tema="claro"] .tecleando{border-color:rgba(7,22,18,.14)}
 @media (prefers-reduced-motion:reduce){
   .burbu{animation:none}
   .tecleando i{animation:none;opacity:.6}
@@ -1904,10 +1910,14 @@ const MARCA_LOGO = `<svg viewBox="0 0 46 42" fill="none" stroke="currentColor" s
 const hora = (d) => d.toLocaleTimeString(idioma === 'en' ? 'en-US' : 'es-MX',
   {hour:'2-digit', minute:'2-digit'});
 
-const burbuja = (x) => `<li class="linea ${x.quien}">
-  ${x.quien === 'mio' ? '' : `<span class="avatar" aria-hidden="true">${MARCA_LOGO}</span>`}
-  <div class="burbu ${x.quien === 'mio' ? 'mia' : 'suya'}">${escapar(x.texto)}<span
-    class="hora">${hora(x.cuando)}</span></div></li>`;
+/* Una sola normalización de `quien` para toda la línea. Antes la burbuja usaba
+   `mia`/`suya` pero el <li> recibía el valor crudo (`mio`), así que la regla
+   que alinea a la derecha no llegaba a aplicarse nunca. */
+const burbuja = (x) => { const lado = x.quien === 'mio' ? 'mia' : 'suya';
+  return `<li class="linea ${lado}">
+  ${lado === 'mia' ? '' : `<span class="avatar" aria-hidden="true">${MARCA_LOGO}</span>`}
+  <div class="burbu ${lado}">${escapar(x.texto)}<span
+    class="hora">${hora(x.cuando)}</span></div></li>`; };
 
 function pintarHilo(){ $('#hilo').innerHTML = historial.map(burbuja).join(''); }
 // Pegado abajo salvo que estés leyendo hacia arriba: arrastrarte de vuelta
